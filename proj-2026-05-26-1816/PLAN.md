@@ -141,4 +141,4 @@ File under change: `/home/khkramer/src/yc-voice-agents-hackathon/server/nvidia_s
 | 3 | Part 2 — VAD-gated audio with pre-roll | done | 50d827c | gated socket sends; pre-roll flush; matched/unmatched VAD-stop; reconnect resets; cancel race fixed. Paired review (Codex b2lm409p7 + Opus): SOUND |
 | 4 | Explicit WS keepalive ping params | done | e5f3c87 | ws_ping_interval/ws_ping_timeout ctor args (20/20 defaults) -> websockets.connect; behavior unchanged; reviewed by Opus+lint |
 | 5 | Offline tests + lint + import check | done | 5f45478 | 12 pytest pass; paired review (Codex b0cqjsv0q+Opus) strengthened matched/unmatched-stop, empty-remainder, UserStarted-no-clear, passthrough/mute/reconnect; ruff+F401 clean |
-| 6 | Live multi-turn smoke test | done | — | automated live verify PASS; caught+fixed strip bug (->count-based); a/b/e verified, c/d/f/g need human listen-test |
+| 6 | Live multi-turn smoke test | done | fe8a94d | automated live verify PASS; caught+fixed strip bug (->count-based); a/b/e verified, c/d/f/g need human listen-test |
