@@ -22,7 +22,11 @@ from nvidia_stt import NVidiaWebSocketSTTService, _strip_committed_prefix  # noq
 
 
 def _make_service():
-    return NVidiaWebSocketSTTService(url="ws://localhost:1", sample_rate=16000)
+    # strip_interim_prefix defaults False now; the Part 1 tests exercise the
+    # stripping path, so opt in explicitly (as bot-wip.py does for the live endpoint).
+    return NVidiaWebSocketSTTService(
+        url="ws://localhost:1", sample_rate=16000, strip_interim_prefix=True
+    )
 
 
 def _audio(b: bytes) -> AudioRawFrame:
@@ -30,29 +34,31 @@ def _audio(b: bytes) -> AudioRawFrame:
 
 
 # --------------------------------------------------------------------------
-# Part 1: _strip_committed_prefix (pure helper)
+# Part 1: _strip_committed_prefix — deterministic strip-by-COUNT
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize(
-    ("interim_text", "committed_tokens", "expected"),
+    ("interim_text", "committed_count", "expected"),
     [
-        ("the stale smell", [], "the stale smell"),  # first turn -> full
-        ("the stale smell a salt pickle", ["the", "stale", "smell"], "a salt pickle"),
-        ("the stale smell", ["the", "stale", "smell"], ""),  # empty remainder
-        ("the stale smell", ["the", "fresh"], None),  # divergent token
-        ("the stale", ["the", "stale", "smell"], None),  # committed longer
-        ("  the   stale smell   a   salt  ", ["the", "stale", "smell"], "a salt"),  # ws norm
-        ("The stale smell", ["the", "stale", "smell"], None),  # casing drift
-        ("the stale smell.", ["the", "stale", "smell"], None),  # punctuation drift
+        ("the stale smell", 0, "the stale smell"),  # nothing committed -> full
+        ("the stale smell a salt pickle", 3, "a salt pickle"),  # drop 3
+        ("the stale smell", 3, ""),  # exactly committed -> nothing new
+        ("the stale", 3, None),  # interim shorter than count -> fall back
+        ("  the   stale smell   a   salt  ", 3, "a salt"),  # whitespace normalized
+        # boundary revision: committed had artifact "ZAC."; interim shows "zest." in
+        # that slot, but strip-by-count drops 3 regardless of the revised value.
+        ("the stale zest. a salt", 3, "a salt"),
+        ("", 0, ""),  # empty interim
+        ("   ", 0, ""),  # whitespace-only -> normalized to ''
     ],
 )
-def test_strip_committed_prefix(interim_text, committed_tokens, expected):
-    assert _strip_committed_prefix(interim_text, committed_tokens) == expected
+def test_strip_committed_prefix(interim_text, committed_count, expected):
+    assert _strip_committed_prefix(interim_text, committed_count) == expected
 
 
 # --------------------------------------------------------------------------
-# Part 1: _handle_transcript — stripping, append-only, skips
+# Part 1: _handle_transcript — strip, count accumulation, skips, fallback
 # --------------------------------------------------------------------------
-def test_handle_transcript_strips_interims_and_appends_committed_tokens():
+def test_handle_transcript_strips_interims_and_counts_committed_tokens():
     async def run_test():
         service = _make_service()
         pushed = []
@@ -66,45 +72,82 @@ def test_handle_transcript_strips_interims_and_appends_committed_tokens():
 
         await interim("the stale smell")
         assert isinstance(pushed[-1], InterimTranscriptionFrame) and pushed[-1].text == "the stale smell"
-        assert service._committed_tokens == []
+        assert service._committed_token_count == 0
 
         await final("the stale smell")
         assert isinstance(pushed[-1], TranscriptionFrame)
         assert pushed[-1].text == "the stale smell"  # final text UNCHANGED
         assert pushed[-1].finalized is True
-        assert service._committed_tokens == ["the", "stale", "smell"]
+        assert service._committed_token_count == 3
 
-        await interim("the stale smell a salt pickle")  # cumulative -> stripped
+        await interim("the stale smell a salt pickle")  # cumulative -> stripped by count
         assert isinstance(pushed[-1], InterimTranscriptionFrame) and pushed[-1].text == "a salt pickle"
 
-        # empty-remainder interim (interim == committed) must NOT emit a frame
+        # empty-remainder interim (== committed) must NOT emit a frame
         n = len(pushed)
         await interim("the stale smell")
-        assert len(pushed) == n  # skipped, nothing pushed
+        assert len(pushed) == n
 
         await final("a salt pickle")
         assert pushed[-1].text == "a salt pickle"
-        assert service._committed_tokens == ["the", "stale", "smell", "a", "salt", "pickle"]
+        assert service._committed_token_count == 6
 
-        # soft final (finalize=False): no frame, no committed change, _waiting_for_final preserved
+        # soft final (finalize=False): no frame, no count change, _waiting_for_final preserved
         n = len(pushed)
-        committed = list(service._committed_tokens)
         service._waiting_for_final = True
         await final("the stale smell a salt pickle soft", finalize=False)
         assert len(pushed) == n
-        assert service._committed_tokens == committed
-        assert service._waiting_for_final is True  # soft final must not clear the wait
+        assert service._committed_token_count == 6
+        assert service._waiting_for_final is True
 
-        # empty hard final: no frame, no committed change, clears the wait
+        # empty hard final: no frame, no count change, clears the wait
         await final("")
         assert len(pushed) == n
-        assert service._committed_tokens == committed
+        assert service._committed_token_count == 6
         assert service._waiting_for_final is False
 
-        # mismatch interim (divergent prefix) -> emitted UNCHANGED (fallback)
-        await interim("the stale smell a brine pickle and pepper")
+        # cumulative interim with revised prior tokens -> stripped by count (no leak)
+        await interim("the stale zest. a brine pickle and pepper")
         assert isinstance(pushed[-1], InterimTranscriptionFrame)
-        assert pushed[-1].text == "the stale smell a brine pickle and pepper"
+        assert pushed[-1].text == "and pepper"
+
+        # interim SHORTER than committed (only without a cumulative session) -> emit unchanged
+        await interim("the stale smell")  # 3 < count 6 -> fallback
+        assert isinstance(pushed[-1], InterimTranscriptionFrame)
+        assert pushed[-1].text == "the stale smell"
+
+    asyncio.run(run_test())
+
+
+def test_multi_turn_artifact_accumulation_no_leak():
+    """Regression guard: with forced-finalization artifacts on every turn's last
+    token, strip-by-count must keep working across many turns (the value-matching
+    approach leaked the full cumulative text after a few turns)."""
+
+    async def run_test():
+        service = _make_service()
+        pushed = []
+        service.push_frame = AsyncMock(side_effect=lambda f, d=FrameDirection.DOWNSTREAM: pushed.append(f))
+
+        async def interim(text):
+            await service._handle_transcript({"text": text, "is_final": False})
+
+        async def final(text):
+            await service._handle_transcript({"text": text, "is_final": True, "finalize": True})
+
+        # Each final's LAST token is an artifact ("ZAC.", "PIK.", ...) that the next
+        # cumulative interim corrects ("zest.", "pickle.", ...).
+        await final("the stale ZAC.")  # count=3
+        await interim("the stale zest. a salt")
+        assert pushed[-1].text == "a salt" and "stale" not in pushed[-1].text
+
+        await final("a salt PIK.")  # count=6
+        await interim("the stale zest. a salt pickle. and pepper")
+        assert pushed[-1].text == "and pepper" and "stale" not in pushed[-1].text  # no leak after 2 turns
+
+        await final("and pepper")  # count=8
+        await interim("the stale zest. a salt pickle. and pepper now what")
+        assert pushed[-1].text == "now what" and "stale" not in pushed[-1].text  # no leak after 3 turns
 
     asyncio.run(run_test())
 
@@ -150,10 +193,9 @@ def test_ring_trim_and_vad_gating_with_matched_stop_effects():
         await service.process_audio_frame(_audio(b"dddd"), FrameDirection.DOWNSTREAM)
         assert sent == [b"bbbbcccc", b"dddd"]
 
-        # matched VAD stop (audio was streamed): finalize + ttfb + waiting flag, frame pushed UPSTREAM.
+        # matched VAD stop (audio streamed): finalize + ttfb + waiting flag, frame pushed UPSTREAM.
         # stop_secs=0.0 so base _handle_vad_user_stopped_speaking returns before its own
-        # start_ttfb/create_task (no TaskManager on an unstarted instance); our override is the
-        # sole start_ttfb_metrics call, so assert_awaited_once is exact.
+        # start_ttfb/create_task; our override is the sole start_ttfb_metrics call.
         await service.process_frame(VADUserStoppedSpeakingFrame(stop_secs=0.0), FrameDirection.UPSTREAM)
         assert service._user_speaking is False
         service._send_reset.assert_awaited_once_with(finalize=True)
@@ -174,11 +216,11 @@ def test_unmatched_vad_stop_skips_finalize_and_base_ttfb():
     and do NOT start TTFB (stop_secs>0 would otherwise let base start one)."""
 
     async def run_test():
-        for user_speaking in (True, False):  # both 'mid' and 'no prior start' variants
+        for user_speaking in (True, False):  # 'mid' and 'no prior start' variants
             service = _make_service()
             service._audio_ring += b"preroll"
             service._user_speaking = user_speaking
-            assert service._audio_bytes_sent == 0  # precondition: nothing streamed
+            assert service._audio_bytes_sent == 0
             pushed = []
             service.push_frame = AsyncMock(side_effect=lambda f, d=FrameDirection.DOWNSTREAM: pushed.append((f, d)))
             service._send_reset = AsyncMock()
@@ -192,7 +234,7 @@ def test_unmatched_vad_stop_skips_finalize_and_base_ttfb():
             assert service._audio_ring == bytearray()
             assert service._waiting_for_final is False
             service._send_reset.assert_not_awaited()
-            service.start_ttfb_metrics.assert_not_awaited()  # base VAD-stop TTFB skipped
+            service.start_ttfb_metrics.assert_not_awaited()
             assert [(type(f), d) for f, d in pushed] == [
                 (VADUserStoppedSpeakingFrame, FrameDirection.UPSTREAM)
             ]
@@ -213,7 +255,7 @@ def test_audio_passthrough_mute_and_reconnect_preserved():
         frame = _audio(b"xxxx")
         await service.process_frame(frame, FrameDirection.DOWNSTREAM)
         assert frame in pushed  # audio_passthrough kept the analyzer fed
-        assert bytes(service._audio_ring) == b"xxxx"  # buffered (gated, not speaking)
+        assert bytes(service._audio_ring) == b"xxxx"
 
         # mute: dropped from STT processing (not ringed)
         service = _make_service()

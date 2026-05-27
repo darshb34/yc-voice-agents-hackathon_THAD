@@ -31,12 +31,36 @@ from pipecat.services.stt_service import WebsocketSTTService
 from pipecat.utils.time import time_now_iso8601
 
 
-def _strip_committed_prefix(interim_text: str, committed_tokens: list[str]) -> str | None:
-    """Strip already-finalized tokens from a cumulative interim transcript."""
+def _strip_committed_prefix(interim_text: str, committed_count: int) -> str | None:
+    """Strip already-finalized tokens from a cumulative interim transcript.
+
+    The server emits interims as the full cumulative hypothesis since the
+    connection opened: ``[ already-finalized prior tokens ] + [ new this turn ]``.
+    ``committed_count`` is how many tokens we have already emitted across finals,
+    so the current turn's new text is the interim with that many leading tokens
+    removed.
+
+    We strip purely by token COUNT (not by value) on purpose: the server revises
+    the last committed word(s) when it keeps decoding past a forced finalization
+    (e.g. a hard-reset artifact ``"ZAC."`` that the next interim corrects to
+    ``"zest."``). The token *count* of the prior region is preserved across that
+    revision even though the text is not, and a value-based prefix check would
+    both fail on every turn boundary and accumulate stale artifact tokens.
+
+    Returns the current-turn tail, ``""`` if nothing new yet, or ``None`` when the
+    interim is shorter than the committed prefix (only possible without a
+    cumulative session, e.g. an unexpected server-side reset — caller emits
+    the interim unchanged rather than slicing wrongly).
+
+    Best-effort cosmetic: if the server ever re-tokenizes the prior region
+    (splits/merges a finalized word so its token count changes, e.g. "ice cream"
+    -> "icecream"), strip-by-count can drop or keep one boundary word in the
+    interim. This is interim-display only; FINAL frames are never altered.
+    """
     interim_tokens = interim_text.split()
-    if interim_tokens[: len(committed_tokens)] != committed_tokens:
+    if len(interim_tokens) < committed_count:
         return None
-    return " ".join(interim_tokens[len(committed_tokens):])
+    return " ".join(interim_tokens[committed_count:])
 
 
 class NVidiaWebSocketSTTService(WebsocketSTTService):
@@ -67,7 +91,7 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
         *,
         url: str = "ws://localhost:8080",
         sample_rate: int = 16000,
-        strip_interim_prefix: bool = True,
+        strip_interim_prefix: bool = False,
         preroll_seconds: float = 1.0,
         ws_ping_interval: float = 20.0,
         ws_ping_timeout: float = 20.0,
@@ -78,7 +102,11 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
         Args:
             url: WebSocket URL of the NVIDIA ASR server.
             sample_rate: Audio sample rate (must be 16000 for Parakeet).
-            strip_interim_prefix: Strip already-finalized tokens from cumulative interims.
+            strip_interim_prefix: Strip already-finalized tokens from cumulative
+                interims (per-turn interim display). Default False — enable ONLY
+                against a server that emits cumulative interims (the continuous
+                Nemotron mode confirmed for this deployment); enabling it against a
+                server that cold-resets per turn would wrongly strip repeated text.
             preroll_seconds: Audio buffered before VAD start so speech onsets are preserved.
             ws_ping_interval: WebSocket ping interval in seconds.
             ws_ping_timeout: WebSocket ping timeout in seconds.
@@ -93,7 +121,7 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
         self._websocket = None
         self._receive_task: asyncio.Task | None = None
         self._ready = False
-        self._committed_tokens: list[str] = []
+        self._committed_token_count: int = 0
         self._user_speaking = False
         self._audio_ring = bytearray()
         self._preroll_bytes = 0
@@ -364,7 +392,7 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
                 logger.warning(f"{self} timeout waiting for ready message, proceeding anyway")
                 self._ready = True
 
-            self._committed_tokens = []
+            self._committed_token_count = 0
             self._user_speaking = False
             self._audio_ring.clear()
             self._audio_bytes_sent = 0
@@ -377,7 +405,7 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
     async def _disconnect_websocket(self):
         """Close the websocket connection."""
         self._ready = False
-        self._committed_tokens = []
+        self._committed_token_count = 0
         self._user_speaking = False
         self._audio_ring.clear()
         self._audio_bytes_sent = 0
@@ -466,7 +494,7 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
                     )
                 )
                 self._waiting_for_final = False
-                self._committed_tokens.extend(text.split())
+                self._committed_token_count += len(text.split())
         else:
             logger.trace(f"{self} interim: {text[:30]}...")
             if not self._strip_interim_prefix:
@@ -480,11 +508,11 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
                 )
                 return
 
-            stripped = _strip_committed_prefix(text, self._committed_tokens)
+            stripped = _strip_committed_prefix(text, self._committed_token_count)
             if stripped is None:
                 logger.debug(
-                    f"{self} interim prefix mismatch; committed prefix sample: "
-                    f"{' '.join(self._committed_tokens[:8])}"
+                    f"{self} interim ({len(text.split())} tokens) shorter than committed "
+                    f"({self._committed_token_count} tokens); emitting unchanged"
                 )
                 stripped = text
             elif stripped == "":

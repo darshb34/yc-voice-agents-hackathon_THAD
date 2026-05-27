@@ -128,7 +128,8 @@ File under change: `/home/khkramer/src/yc-voice-agents-hackathon/server/nvidia_s
   Then `uv run ruff check nvidia_stt.py` (rules `I`,`UP`) AND `uv run ruff check --select F401 nvidia_stt.py` (since the project's default select doesn't include F401, run this explicitly to catch unused imports), and `uv run python -c "import nvidia_stt"`; fix issues.
   Key files: `proj-2026-05-26-1816/test_nvidia_stt_logic.py`, `server/nvidia_stt.py`
 
-- [ ] **6. Live multi-turn smoke test against ws://192.168.7.228:8081**
+- [x] **6. Live multi-turn smoke test against ws://192.168.7.228:8081**
+  **RESULT (automated):** step6_live_verify.py captured REAL two-utterance output from the live server and replayed it through the actual _handle_transcript. The live test SURFACED A BUG — the original exact-prefix strip leaked the full cumulative transcript at every turn boundary (forced-finalization artifact 'ZAC.' vs corrected 'zest.'). Fixed by switching Part 1 to deterministic strip-by-COUNT (self._committed_token_count); re-verified PASS: U2 interim shows only its own text, finals are per-turn deltas, server confirmed cumulative. Covered: (a) per-turn interims/no cumulative, (b) per-turn finals, (e) no cross-turn spurious text. NOT covered (need live bot + HUMAN listen-test): (c) turn-taking latency/TTFB, (d) >25s idle in full pipeline, (f) quiet-utterance turn-start, (g) barge-in onset.
   Run `bot-wip.py` (WebRTC, `uv run`) end-to-end. Verify and record PASS/FAIL per criterion: (a) new-turn interim shows ONLY the current turn (no prior-turn text); (b) per-turn FINAL transcripts correct; (c) turn-taking ends promptly (`NVidiaWebSocketSTTService` TTFB fires; no 5 s `user_turn_stop_timeout` fallback); (d) speak → silent >25 s → speak: connection survived (no reconnect in logs), next turn transcribes; (e) no spurious tokens from inter-turn silence/echo; (f) **quiet/short utterance still triggers a turn** (validates the accepted transcription-fallback regression isn't fatal); (g) barge-in over the bot still captures the user's onset (pre-roll working).
   Key files: `server/bot-wip.py`, `server/nvidia_stt.py`
 
@@ -139,5 +140,5 @@ File under change: `/home/khkramer/src/yc-voice-agents-hackathon/server/nvidia_s
 | 2 | Part 1 — best-effort interim prefix-strip | done | 2483a38 | append-only committed tokens; None→fallback+log, ""→skip; wired strip_interim_prefix=True; lint+F401+import clean |
 | 3 | Part 2 — VAD-gated audio with pre-roll | done | 50d827c | gated socket sends; pre-roll flush; matched/unmatched VAD-stop; reconnect resets; cancel race fixed. Paired review (Codex b2lm409p7 + Opus): SOUND |
 | 4 | Explicit WS keepalive ping params | done | e5f3c87 | ws_ping_interval/ws_ping_timeout ctor args (20/20 defaults) -> websockets.connect; behavior unchanged; reviewed by Opus+lint |
-| 5 | Offline tests + lint + import check | done | — | 12 pytest pass; paired review (Codex b0cqjsv0q+Opus) strengthened matched/unmatched-stop, empty-remainder, UserStarted-no-clear, passthrough/mute/reconnect; ruff+F401 clean |
-| 6 | Live multi-turn smoke test | pending | — | |
+| 5 | Offline tests + lint + import check | done | 5f45478 | 12 pytest pass; paired review (Codex b0cqjsv0q+Opus) strengthened matched/unmatched-stop, empty-remainder, UserStarted-no-clear, passthrough/mute/reconnect; ruff+F401 clean |
+| 6 | Live multi-turn smoke test | done | — | automated live verify PASS; caught+fixed strip bug (->count-based); a/b/e verified, c/d/f/g need human listen-test |

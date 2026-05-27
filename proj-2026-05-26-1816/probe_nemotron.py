@@ -40,7 +40,7 @@ async def recv_until_idle(ws, idle_s=1.2, tag=""):
     while True:
         try:
             msg = await asyncio.wait_for(ws.recv(), timeout=idle_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         d = json.loads(msg)
         if d.get("type") == "transcript":
@@ -118,7 +118,7 @@ async def main():
                 if d.get("type") == "transcript" and not d.get("is_final") and first_interim_dt is None:
                     first_interim_dt = time.time() - t1
                     fresh = d.get("text", "")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
         await boundary(ws, "reset")
         bb = await recv_until_idle(ws, tag="u2")
