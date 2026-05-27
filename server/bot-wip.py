@@ -46,7 +46,6 @@ from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.gradium.tts import GradiumTTSService
 from pipecat.services.llm_service import FunctionCallParams
-from pipecat.services.openai.responses.llm import OpenAIResponsesLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -54,6 +53,7 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPI
 from pipecat.turns.user_turn_strategies import FilterIncompleteUserTurnStrategies
 
 from mock_backend import BOUQUETS, KNOWN_CUSTOMERS
+from nemotron_llm import VLLMOpenAILLMService
 from nvidia_stt import NVidiaWebSocketSTTService
 
 load_dotenv(override=True)
@@ -357,12 +357,35 @@ async def run_bot(
         strip_interim_prefix=True,
     )
 
-    # LLM service
-    llm = OpenAIResponsesLLMService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        settings=OpenAIResponsesLLMService.Settings(
-            model="gpt-4.1",
+    # LLM service — Nemotron-3-Super-120B served by vLLM (OpenAI-compatible chat
+    # completions at /v1). vLLM exposes the Chat Completions API, not the Responses
+    # API, so we use OpenAILLMService (not OpenAIResponsesLLMService). The live
+    # endpoint serves the model as "nemotron-3-super" (per its /v1/models).
+    #
+    # Reasoning ("thinking") toggle — Nemotron is controlled per-request via
+    # chat_template_kwargs.enable_thinking, forwarded through the OpenAI client's
+    # extra_body (the request-body convention confirmed against this endpoint in
+    # ../aiewf-eval traces). Default OFF for low-latency voice. To ENABLE, set
+    # NEMOTRON_ENABLE_THINKING=true; to DISABLE, leave unset/false.
+    #
+    # CAUTION for voice: reasoning is only kept out of the spoken `content` if the
+    # vLLM server runs a reasoning parser (e.g. --reasoning-parser nemotron_v3, which
+    # routes it to a separate `reasoning_content` field). This live endpoint did NOT
+    # surface reasoning_content in testing, so if thinking is enabled and the server
+    # lacks a parser, chain-of-thought would appear inline in `content` and get
+    # spoken. Keep thinking OFF for voice unless the parser is confirmed active.
+    # VLLMOpenAILLMService is a thin OpenAILLMService subclass that reports TTFB to
+    # the first NON-THINKING token (so the metric reflects time-to-first-spoken-word
+    # when reasoning is enabled, not time-to-first-reasoning-token). No-op when
+    # thinking is off. See server/nemotron_llm.py.
+    enable_thinking = os.getenv("NEMOTRON_ENABLE_THINKING", "false").lower() == "true"
+    llm = VLLMOpenAILLMService(
+        api_key=os.getenv("NEMOTRON_LLM_API_KEY", "EMPTY"),  # vLLM ignores unless --api-key set
+        base_url=os.getenv("NEMOTRON_LLM_URL", "http://192.168.7.228:8000/v1"),
+        settings=VLLMOpenAILLMService.Settings(
+            model=os.getenv("NEMOTRON_LLM_MODEL", "nvidia/nemotron-3-super"),
             system_instruction=system_instruction,
+            extra={"extra_body": {"chat_template_kwargs": {"enable_thinking": enable_thinking}}},
         ),
     )
 
@@ -454,7 +477,13 @@ async def bot(runner_args: RunnerArguments):
                 ),
             )
         case WebSocketRunnerArguments():
-            audio_in_sample_rate = 8000
+            # Twilio media streams are 8 kHz μ-law on the wire, but Nemotron STT
+            # requires 16 kHz. Set the pipeline input rate to 16 kHz — the
+            # TwilioFrameSerializer upsamples inbound 8 kHz μ-law -> 16 kHz PCM in
+            # deserialize() (ulaw_to_pcm via its _input_resampler), so the STT
+            # receives 16 kHz. Outbound is downsampled back to 8 kHz μ-law by the
+            # serializer regardless, so the output rate can stay at 8 kHz.
+            audio_in_sample_rate = 16000
             audio_out_sample_rate = 8000
             # Parse Twilio websocket and fetch call information
             _, call_data = await parse_telephony_websocket(runner_args.websocket)

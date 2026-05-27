@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
     VADUserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.settings import STTSettings
 from pipecat.services.stt_service import WebsocketSTTService
 from pipecat.utils.time import time_now_iso8601
 
@@ -112,7 +113,14 @@ class NVidiaWebSocketSTTService(WebsocketSTTService):
             ws_ping_timeout: WebSocket ping timeout in seconds.
             **kwargs: Additional arguments passed to the parent WebsocketSTTService.
         """
-        super().__init__(sample_rate=sample_rate, **kwargs)
+        # model/language are unsupported here (the server has a fixed model and we
+        # don't do runtime language selection) — set them to None so the base
+        # STTSettings validator doesn't flag them as NOT_GIVEN.
+        super().__init__(
+            sample_rate=sample_rate,
+            settings=STTSettings(model=None, language=None),
+            **kwargs,
+        )
         self._url = url
         self._strip_interim_prefix = strip_interim_prefix
         self._preroll_seconds = preroll_seconds
