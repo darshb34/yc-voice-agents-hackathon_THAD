@@ -78,7 +78,7 @@ Once the bot works locally, deploy to Pipecat Cloud and connect it to a Twilio p
    pc cloud organizations list
    ```
 
-4. Create a [TwiML Bin](https://help.twilio.com/articles/360043489573) with this configuration:
+4. [Create a TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#create-a-new-twiml-bin) with this configuration:
 
    ```xml
    <?xml version="1.0" encoding="UTF-8"?>
@@ -94,7 +94,10 @@ Once the bot works locally, deploy to Pipecat Cloud and connect it to a Twilio p
 
    Replace `YOUR_ORG_NAME` with the org name from step 2.
 
-5. Attach the TwiML Bin to your Twilio number: **Phone Numbers → Manage → Active numbers → \<your number\> → Voice Configuration → A call comes in → TwiML Bin**, then select the bin you just created. Save.
+5. [Attach the TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#wire-your-twiml-bin-up-to-an-incoming-phone-call) to your Twilio number: Go to [your phone numbers](https://console.twilio.com/go?to=/account/__account__/us1/senders-hub/list/phone-numbers/inventory) → select your
+number → under **Voice Configuration**, set method to the **TwiML Bin** you created → Save.
+
+6. [Optional] Use [Twilio Dev phone](https://www.twilio.com/docs/labs/dev-phone) for testing.
 
 ### Review the deployment configuration
 
