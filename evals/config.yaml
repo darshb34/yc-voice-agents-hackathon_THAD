@@ -14,7 +14,7 @@ cekura:
   project_id: 5636             # "HG Z Project"
   agent_id: 18069              # "Tetris Nutrition Coach"  (flower agent was 18027, deprecated)
   personality_id: 693          # Normal Male (en)
-  folder: "Coach - new member intake"
+  folder: "Coach eval suite v1"
   dashboard_result_url: "https://dashboard.cekura.ai/{project_id}/results/{result_id}?call_id={run_id}"
 
 pipecat_cloud:
@@ -28,6 +28,13 @@ run:
   concurrency: 3               # Pipecat max_agents cap; >this fails with concurrency-limit
   poll_interval_secs: 20
   timeout_secs: 1800
+
+# Cekura test_profiles inject the single-user state into each session (the
+# "injected per-session context" mechanism). The agent must read this on boot and
+# SKIP onboarding. Shape + load/write contract: docs/PERSISTENCE_CONTRACT.md.
+seeding:
+  fresh_day: 16012        # Sam, returning, nothing logged today (remaining == daily target)
+  midday_logged: 16013    # Sam, breakfast+lunch logged (remaining 1140 cal / 96 P / 93 C / 42 F)
 
 # Prompt-optimization target (Phase 4b): the coach persona lives in
 # server/coach_prompt.py::build_system_instruction — Albert designed it so an
@@ -55,10 +62,45 @@ metrics:
   performance:
     - { id: 144352, name: "Latency (in ms)" }
     - { id: 144348, name: "Average Pitch (in Hz)" }
+  # Custom metrics for the single-user persistence + flexible-coach requirements.
+  # M1/M2 only fire meaningfully on seeded returning-member scenarios (G/H/I);
+  # M3 fires wherever the member presents options/constraints. (M4 Goal Proximity
+  # is NOT here — it's computed deterministically in report.py from `target` below.)
+  recall_and_adaptation:
+    - { id: 148009, name: "No Re-Onboarding",          affects_success: true }
+    - { id: 148010, name: "Recall Accuracy" }
+    - { id: 148011, name: "Adaptive Problem-Solving" }
 
-# Skeleton scenarios (more to come from detailed specs). Returning-member flows are
-# intentionally omitted: Cekura can't match a caller ID to KNOWN_MEMBERS, so those
-# can't be exercised here — keep scenarios to new-member / anonymous flows.
+# Coach eval suite v1 — the "north star" test set. Pass criteria define the TARGET
+# behavior to optimize the agent toward (per product roadmap JTBDs), NOT the agent's
+# current state. All are first-call / self-contained flows (no seeded state needed).
+#
+# Returning-member + same-day-continuity + compositional-optimization families
+# (G/H/I) are planned next: those require a seeded single-user profile + daily-log
+# fixture (the persistence contract with the agent), so they live in a separate
+# run mode — see docs once built.
 scenarios:
-  intake:
-    - { id: 273074, name: "New member intake → first meal rec (happy path)" }
+  onboarding:
+    - { id: 273074, name: "A1 New member intake → first meal rec (happy path)" }
+    - { id: 273108, name: "A2 Overwhelmed first-timer — minimal setup, dinner tonight" }
+  recommend:
+    - { id: 273109, name: "B1 Vegan member wants a high-protein dinner" }
+    - { id: 273110, name: "B2 Craving-driven rec — Mexican lunch on a budget" }
+    - { id: 273111, name: "B3 Eat-out request — find a nearby spot and fit a dish" }
+  safety:
+    - { id: 273112, name: "C1 Allergy safety — shellfish/fish, asks for seafood anyway" }
+    - { id: 273113, name: "C2 Safety — extreme calorie-restriction request" }
+  adapt:
+    - { id: 273114, name: "D1 Signature move — log off-plan meal and adapt the day" }
+  guidance:
+    - { id: 273115, name: "E1 Can I eat this? — pizza tonight judgment call" }
+  summary:
+    - { id: 273118, name: "F1 End-of-day check-in — log two meals then summarize" }
+  # Returning-member / seeded families (G/H/I) — in folder "Coach eval suite v1.Returning (seeded)".
+  # North-star: these FAIL until the agent loads injected per-session context (test_profile)
+  # and skips onboarding. Run in a separate seeded mode. `target` = the REMAINING macro
+  # budget the recommendation should hit — ground truth for M4 Goal Proximity (report.py).
+  returning:
+    - { id: 273178, name: "G Returning member — skip onboarding", test_profile: 16012 }
+    - { id: 273179, name: "H Same-day continuity — fit remaining", test_profile: 16013, target: { calories: 1140, protein_g: 96, carbs_g: 93, fat_g: 42 } }
+    - { id: 273180, name: "I Compositional optimization", test_profile: 16013, target: { calories: 1140, protein_g: 96, carbs_g: 93, fat_g: 42 } }

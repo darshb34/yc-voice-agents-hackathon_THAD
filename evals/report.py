@@ -23,6 +23,8 @@ from typing import Any
 
 import yaml
 
+from evals.goal_proximity import score_run
+
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 WER_RE = re.compile(r"WER:\s*([\d.]+)%")
 
@@ -185,6 +187,28 @@ def render(
     runs = [parse_run(r, bucket_by_scenario) for r in result.get("runs", {}).values()]
     runs.sort(key=lambda r: (r.bucket, r.scenario_name))
     result_id = result["id"]
+
+    # M4 Goal Proximity (deterministic) — only for seeded scenarios that carry a
+    # `target` (remaining budget) AND only when per-run transcripts are available.
+    target_by_scenario = {
+        s["id"]: s["target"]
+        for scns in config.get("scenarios", {}).values()
+        for s in scns
+        if isinstance(s, dict) and s.get("target")
+    }
+    transcript_by_run: dict[int, Any] = {}
+    for d in runs_detail or []:
+        rid = d.get("id")
+        if rid is not None:
+            transcript_by_run[rid] = d.get("transcript_object") or d.get("transcript")
+    proximity_by_run: dict[int, dict] = {}
+    for r in runs:
+        tgt = target_by_scenario.get(r.scenario_id)
+        tob = transcript_by_run.get(r.run_id)
+        if tgt and tob is not None:
+            scored_gp = score_run(tob, tgt)
+            if scored_gp:
+                proximity_by_run[r.run_id] = scored_gp
     # Per-run result_id for dashboard links (differs per wave when merged).
     rid_map = result_id_by_run or {r.run_id: result_id for r in runs}
 
@@ -230,15 +254,36 @@ def render(
     # Scenario table
     lines.append("## Results by scenario")
     lines.append("")
-    lines.append("| Scenario | Bucket | Outcome | Latency | WER | Dead air | Link |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append("| Scenario | Bucket | Outcome | Latency | WER | Dead air | Goal | Link |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for r in runs:
         lat = f"{r.avg_latency_ms/1000:.1f}s" if r.avg_latency_ms else "—"
         wer = f"{r.wer_pct:.0f}%" if r.wer_pct is not None else "—"
         da = "⚠️" if r.dead_air else ("—" if r.status in ("completed", "evaluating") else "")
+        gp = proximity_by_run.get(r.run_id)
+        gpcell = f"{gp['score']*100:.0f}%" if gp else "—"
         lines.append(f"| {r.scenario_name} | {r.bucket} | {_emoji(r)} {r.evaluation_status} "
-                     f"| {lat} | {wer} | {da} | {link(r, 'view')} |")
+                     f"| {lat} | {wer} | {da} | {gpcell} | {link(r, 'view')} |")
     lines.append("")
+
+    # Goal Proximity (M4) — deterministic, only for seeded returning-member runs.
+    if proximity_by_run:
+        rs_by_run = {r.run_id: r for r in runs}
+        lines.append("## Goal Proximity (M4 — deterministic)")
+        lines.append("")
+        lines.append("How close the agent's recommended meal landed to the seeded *remaining* "
+                     "macro target (1.00 = exact). Parsed from the transcript and scored by us, "
+                     "not an LLM judge.")
+        lines.append("")
+        lines.append("| Scenario | Proximity | Recommended (parsed) | Target (remaining) |")
+        lines.append("|---|---|---|---|")
+        for rid, gp in proximity_by_run.items():
+            r = rs_by_run.get(rid)
+            nm = r.scenario_name if r else str(rid)
+            parsed = ", ".join(f"{k.replace('_g', '')} {v}" for k, v in gp["parsed"].items())
+            tgt = ", ".join(f"{k.replace('_g', '')} {v}" for k, v in gp["target"].items())
+            lines.append(f"| {nm} | {gp['score']:.2f} | {parsed} | {tgt} |")
+        lines.append("")
 
     # Failures grouped by cause
     failed = [r for r in scored if not r.passed]
