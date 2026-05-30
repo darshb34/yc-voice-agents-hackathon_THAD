@@ -1,0 +1,5 @@
+# Eval pipeline deps (separate from the bot). Install into any Python 3.11+ env:
+#   pip install -r evals/requirements.txt
+# report.py needs only pyyaml; run.py / cekura_client.py also need requests.
+pyyaml>=6.0
+requests>=2.31

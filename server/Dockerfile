@@ -17,4 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy the application code
 COPY ./bot.py bot.py
+COPY ./bot-nemotron.py bot-nemotron.py
+COPY ./nemotron_llm.py nemotron_llm.py
+COPY ./nvidia_stt.py nvidia_stt.py
 COPY ./mock_backend.py mock_backend.py

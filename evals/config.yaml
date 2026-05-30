@@ -1,0 +1,81 @@
+# Cekura eval configuration — Field & Flower (Nemotron)
+#
+# Single source of truth for the automated testing pipeline. Phase 3 (evals/run.py)
+# reads this to trigger runs, poll results, and write reports. Everything here was
+# created via the Cekura MCP during Phase 1 setup.
+#
+# Connection model: the bot is deployed on Pipecat Cloud as agent "flower-bot".
+# Cekura starts sessions against it via scenarios_run_pipecat_v2 (Daily/WebRTC),
+# using the project/agent's pipecat_api_key + pipecat_data.pipecat_agent_name.
+
+cekura:
+  organization_id: 4664        # TetrisNutrition
+  project_id: 5636             # "HG Z Project" (project create 500s server-side; reusing this)
+  agent_id: 18027              # "Field & Flower (Nemotron)"
+  test_profile_id: 15959       # auto-created default test profile
+  personality_id: 693          # Normal Male (en, American)
+  folder: "Phase 1 - Field and Flower suite"
+  dashboard_result_url: "https://dashboard.cekura.ai/{project_id}/results/{result_id}?call_id={run_id}"
+
+pipecat_cloud:
+  org: "legitimate-otter-copper-485"
+  agent_name: "flower-bot"
+  secret_set: "flower-bot-secrets"
+  # Public API key lives in server/.env as PIPECAT_API_KEY (gitignored). Cekura
+  # holds its own copy on the agent (pipecat_api_key_configured: true).
+
+run:
+  mode: pipecat_v2             # scenarios_run_pipecat_v2 (Daily/WebRTC via Pipecat Cloud)
+  frequency: 1                 # runs per scenario per suite execution; total runs = scenarios x frequency
+  # Pipecat Cloud "flower-bot" caps at max_agents=10, so >10 concurrent sessions fail
+  # with ended_reason="pipecat-agent-concurrency-limit-reached". The pipeline submits
+  # scenarios in waves of `concurrency` and waits for each wave before the next.
+  # Raise this only if you also raise the deploy cap: `pcc deploy --max-agents N`.
+  # Set to 3 deliberately: fewer concurrent sessions => less load on the shared
+  # Nemotron LLM endpoint => lower per-turn latency (hypothesis under test).
+  concurrency: 3
+  poll_interval_secs: 20
+  timeout_secs: 1800
+
+# The 11 project-level predefined metrics, grouped by the 4 families we care about.
+# All auto-attach to generated scenarios and (except the noted ones) affect call success.
+metrics:
+  task_success:
+    - { id: 144349, slug: expected_outcome,      name: "Expected Outcome",        affects_success: true }
+    - { id: 144350, slug: infrastructure_issues, name: "Infrastructure Issues",   affects_success: true }  # fails if agent silent >10s — catches dead air
+  tool_calling:
+    - { id: 144355, slug: tool_call_success,      name: "Tool Call Success",       affects_success: true }
+  conversational_quality:
+    - { id: 144351, slug: interruption_score,     name: "Interruption Score",      affects_success: true }
+    - { id: 144347, slug: ai_interrupting_user,   name: "AI interrupting user",    affects_success: false }
+    - { id: 144353, slug: stop_time_after_user_interruption_ms, name: "Stop Time after User Interruption (ms)", affects_success: true }
+    - { id: 144354, slug: talk_ratio,             name: "Talk Ratio",              affects_success: false }
+    - { id: 144357, slug: unnecessary_repetition, name: "Unnecessary Repetition Score", affects_success: true }
+  stt_accuracy:
+    - { id: 144356, slug: transcription_accuracy, name: "Transcription Accuracy",  affects_success: true }   # free in simulation
+  performance:
+    - { id: 144352, slug: latency_in_ms,          name: "Latency (in ms)",         affects_success: true }
+    - { id: 144348, slug: average_pitch_in_hz,    name: "Average Pitch (in Hz)",   affects_success: false }
+
+# 12-scenario suite. bucket = our coverage taxonomy; all share personality 693 + test profile 15959.
+scenarios:
+  happy_path:
+    - { id: 272708, name: "Sympathy Whites Funeral Order" }
+    - { id: 272709, name: "Wildflower Medley Order with Special" }
+    - { id: 272710, name: "Graduation Gold Delivery Order" }
+    - { id: 272712, name: "Anniversary Relative Date Delivery" }    # "next Tuesday"
+    - { id: 272715, name: "Multi-Item Floral Order with Delivery" }
+    - { id: 272717, name: "Birthday Gift Order Workflow" }
+  edge_case:
+    - { id: 272707, name: "Orchid Unavailable, Rose Romance Order" }  # not carried
+    - { id: 272713, name: "Sympathy Bouquet Out-of-Stock Alternative" }  # Lily Elegance -> Sympathy Whites
+    - { id: 272714, name: "Mid-Order Bouquet Switch" }
+  stt_stress:
+    - { id: 272706, name: "Complex Address STT Accuracy Test" }       # Worcester Blvd / Aaron Vaszquez / a week from Thursday
+    - { id: 272711, name: "Recipient Name Complex Spelling" }         # Catherine Scheu
+    - { id: 272716, name: "Quantity/Date Homophone Test" }            # half a dozen / the twenty-second
+
+# Smoke-test scenario from Phase 0 (no metrics attached; not part of the scored suite).
+smoke_test:
+  scenario_id: 272659
+  last_result_id: 591057

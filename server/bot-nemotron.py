@@ -49,6 +49,7 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
+from pipecat.turns.user_turn_completion_mixin import UserTurnCompletionConfig
 from pipecat.turns.user_turn_strategies import FilterIncompleteUserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
@@ -406,7 +407,17 @@ async def run_bot(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
-            user_turn_strategies=FilterIncompleteUserTurnStrategies(),
+            # Latency: the default incomplete-turn timeouts (5s/10s) make the bot
+            # over-wait when the LLM judges a short caller answer "incomplete",
+            # which dominated per-turn latency (~2.5s of a ~2.8s turn; STT/LLM/TTS
+            # are each ~0.15s). Cap them so end-of-turn is detected promptly while
+            # still allowing a brief pause on genuinely mid-thought utterances.
+            user_turn_strategies=FilterIncompleteUserTurnStrategies(
+                config=UserTurnCompletionConfig(
+                    incomplete_short_timeout=1.0,
+                    incomplete_long_timeout=2.0,
+                ),
+            ),
         ),
     )
 
