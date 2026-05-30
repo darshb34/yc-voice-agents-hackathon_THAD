@@ -15,9 +15,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-# Copy the application code
-# Pipecat Cloud's base image runs `bot.py`, so the nemotron entrypoint is copied to that name.
-COPY ./bot-nemotron.py bot.py
-COPY ./mock_backend.py mock_backend.py
+# Copy the application code.
+# Pipecat Cloud's base image runs `bot.py` (the Nemotron service-stack shim that
+# hands build_services to coach_core.bot_entry). Ship the full coach package.
+COPY ./bot.py bot.py
+COPY ./coach_core.py coach_core.py
+COPY ./coach_prompt.py coach_prompt.py
+COPY ./member_store.py member_store.py
+COPY ./nutrition_backend.py nutrition_backend.py
 COPY ./nemotron_llm.py nemotron_llm.py
 COPY ./nvidia_stt.py nvidia_stt.py

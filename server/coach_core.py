@@ -31,6 +31,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.runner.types import (
+    DailyRunnerArguments,
     RunnerArguments,
     SmallWebRTCRunnerArguments,
     WebSocketRunnerArguments,
@@ -39,6 +40,7 @@ from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
@@ -698,6 +700,22 @@ async def bot_entry(runner_args: RunnerArguments, build_services):
         krisp_filter = None
 
     match runner_args:
+        case DailyRunnerArguments():
+            # Pipecat Cloud injects DailyRunnerArguments (and this is the path
+            # Cekura's scenarios_run_pipecat_v2 exercises). transcription_enabled
+            # stays False so Daily's Deepgram doesn't run — we use our Nemotron STT.
+            transport = DailyTransport(
+                runner_args.room_url,
+                runner_args.token,
+                "Tetris Nutrition Coach",
+                DailyParams(
+                    audio_in_enabled=True,
+                    audio_in_filter=krisp_filter,
+                    audio_out_enabled=True,
+                    camera_out_enabled=False,
+                    transcription_enabled=False,
+                ),
+            )
         case SmallWebRTCRunnerArguments():
             webrtc_connection: SmallWebRTCConnection = runner_args.webrtc_connection
 
