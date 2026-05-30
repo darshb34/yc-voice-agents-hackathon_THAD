@@ -4,14 +4,19 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""Field & Flower — flower shop voice ordering bot (hackathon starter).
+"""Tetris Nutrition — adaptive macro coach voice agent (Nemotron stack).
 
-A customer calls in and the bot helps them pick a bouquet and arrange delivery.
-All backend calls (catalog, customer lookup, order placement) are mocked so the
-starter runs with no external dependencies beyond the AI services.
+A member calls in and the coach either (a) runs a short voice intake and computes
+their daily calorie + macro targets, or (b) recommends meals that fit what's left
+of their day and re-optimizes when they've skipped, swapped, or over-eaten —
+Tetris's "a meal plan that adapts when life happens", by voice.
 
-Pipeline: Nemotron Speech Streaming STT → Nemotron-3-Super-120B LLM → Gradium TTS, with direct
-function tools registered on the LLM context.
+All backend calls (meal catalog, target calc, member lookup) are mocked in
+``nutrition_backend.py`` behind a data-access layer, so swapping to the real
+Tetris API is a one-file change. The persona lives in ``coach_prompt.py``.
+
+Pipeline: Nemotron Speech Streaming STT → Nemotron-3-Super-120B LLM → Gradium TTS,
+with direct function tools registered on the LLM context.
 
 Run the bot using::
 
@@ -19,8 +24,6 @@ Run the bot using::
 """
 
 import os
-import random
-from datetime import date
 
 import aiohttp
 from dotenv import load_dotenv
@@ -52,11 +55,62 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPI
 from pipecat.turns.user_turn_strategies import FilterIncompleteUserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
-from mock_backend import BOUQUETS, KNOWN_CUSTOMERS
+from coach_prompt import build_caller_context, build_system_instruction
 from nemotron_llm import VLLMOpenAILLMService
+from nutrition_backend import KNOWN_MEMBERS, calc_targets, find_meals, get_meal
 from nvidia_stt import NVidiaWebSocketSTTService
 
 load_dotenv(override=True)
+
+
+MACRO_KEYS = ("calories", "protein_g", "carbs_g", "fat_g")
+
+
+def new_call_state() -> dict:
+    """Fresh per-call coach state: the member's profile plus today's meal log."""
+    return {
+        "profile": {
+            "goal": None,  # "cut" | "maintain" | "bulk"
+            "diet_style": None,  # omnivore | vegetarian | vegan | keto | paleo | pescatarian
+            "allergies": [],
+            "restrictions": [],
+            "activity_level": None,  # sedentary | light | moderate | active | very_active
+            "biometrics": {"sex": None, "age": None, "height_cm": None, "weight_kg": None},
+            "targets": None,  # {calories, protein_g, carbs_g, fat_g}
+        },
+        "log": {"meals": []},  # each: {name, slot, calories, protein_g, carbs_g, fat_g}
+        # For returning members: macros already consumed today before this call.
+        "consumed_baseline": None,
+        "member_id": None,
+        # Set once set_restrictions has been called (or a known member's profile is
+        # loaded) — a deterministic safety gate so meals aren't recommended before
+        # allergies have been captured, rather than relying on prompt adherence.
+        "allergies_confirmed": False,
+    }
+
+
+def remaining_macros(state: dict) -> dict | None:
+    """Macros left for the day = targets − (already-consumed baseline + logged meals).
+
+    Returns None when targets aren't set yet. Values may be negative (over budget) —
+    that's intentional and drives the "adapt when life happens" coaching.
+    """
+    targets = state["profile"].get("targets")
+    if not targets:
+        return None
+    base = state.get("consumed_baseline") or {k: 0 for k in MACRO_KEYS}
+    used = {
+        k: base.get(k, 0) + sum(m.get(k, 0) for m in state["log"]["meals"]) for k in MACRO_KEYS
+    }
+    rem = {k: round(targets[k] - used[k]) for k in MACRO_KEYS}
+    rem["meals_logged"] = len(state["log"]["meals"])
+    return rem
+
+
+def profile_missing(state: dict) -> list[str]:
+    """Required intake fields not yet captured (gate for compute_targets)."""
+    p = state["profile"]
+    return [f for f in ("goal", "diet_style", "activity_level") if not p.get(f)]
 
 
 async def get_call_info(call_sid: str) -> dict:
@@ -112,166 +166,301 @@ async def run_bot(
 
     Args:
         transport: The transport to use.
-        from_number: Caller's phone number (Twilio path only) for known-customer lookup.
+        from_number: Caller's phone number (Twilio path only) for known-member lookup.
         audio_in_sample_rate: Input audio sample rate in Hz. Defaults to 16000 (WebRTC).
         audio_out_sample_rate: Output audio sample rate in Hz. Defaults to 24000 (WebRTC).
     """
     logger.info("Starting bot")
 
-    # Per-call order state. Closed over by the tool functions below so each
-    # call gets its own isolated order.
-    order: dict = {"items": [], "delivery": None}
+    # Per-call coach state. Closed over by the tool functions below so each call
+    # gets its own isolated profile + meal log.
+    state = new_call_state()
+
+    # Returning member? Pre-load their profile + targets + today's remaining macros
+    # so we can skip intake and go straight to coaching.
+    member = KNOWN_MEMBERS.get(from_number or "")
+    if member:
+        state["member_id"] = from_number
+        prof = member["profile"]
+        for key in ("goal", "diet_style", "allergies", "restrictions", "activity_level", "targets"):
+            if key in prof:
+                state["profile"][key] = prof[key]
+        # A known member's allergies are already on file — safe to recommend.
+        state["allergies_confirmed"] = True
+        rem = member.get("today", {}).get("remaining")
+        if rem and state["profile"].get("targets"):
+            t = state["profile"]["targets"]
+            state["consumed_baseline"] = {k: t[k] - rem.get(k, t[k]) for k in MACRO_KEYS}
 
     # --- Tools the LLM can call ---------------------------------------------
 
-    async def list_bouquets(
-        params: FunctionCallParams,
-        occasion: str | None = None,
-        specials_only: bool = False,
-    ) -> None:
-        """List bouquets available today. Optionally filter by occasion or by
-        what's currently on special.
+    # Intake -----------------------------------------------------------------
 
-        Use this when the caller asks what's available, mentions a specific
-        occasion ("it's for my mom's birthday", "for Valentine's Day", "for a
-        funeral"), or asks about specials/deals. Sold-out bouquets are
-        automatically excluded from results.
+    async def set_goal(params: FunctionCallParams, goal: str) -> None:
+        """Record the member's primary goal. Call this during intake.
 
         Args:
-            occasion: Lowercase occasion to filter by. Common values:
-                "birthday", "anniversary", "valentine's day", "mother's day",
-                "sympathy", "wedding", "graduation", "thank you", "get well",
-                "new baby", "housewarming", "christmas", "easter", "just
-                because". Pass the canonical short form ("birthday", not "mom's
-                birthday"). Omit to return the full catalog.
-            specials_only: If True, only return bouquets currently on special.
+            goal: One of "cut" (lose fat), "maintain", or "bulk" (gain muscle).
         """
-        results = []
-        for name, info in BOUQUETS.items():
-            if not info["in_stock"]:
-                continue
-            if specials_only and not info.get("on_special", False):
-                continue
-            if occasion is not None:
-                occ = occasion.strip().lower()
-                tags = [o.lower() for o in info.get("occasions", [])]
-                if not any(occ in tag or tag in occ for tag in tags):
-                    continue
-            results.append({"name": name, **info})
-
-        if not results and (occasion is not None or specials_only):
-            await params.result_callback(
-                {
-                    "bouquets": [],
-                    "note": (
-                        "No bouquets match those filters. Tell the caller you don't have "
-                        "anything specifically for that, and offer to browse the full "
-                        "catalog or try a different angle."
-                    ),
-                }
-            )
-            return
-
-        await params.result_callback({"bouquets": results})
-
-    async def check_availability(params: FunctionCallParams, bouquet_name: str) -> None:
-        """Check whether a specific bouquet is in stock today.
-
-        Args:
-            bouquet_name: The name of the bouquet to check, lowercase.
-        """
-        item = BOUQUETS.get(bouquet_name.lower())
-        if not item:
-            await params.result_callback(
-                {"available": False, "reason": f"We don't carry a bouquet called '{bouquet_name}'."}
-            )
-            return
-        if not item["in_stock"]:
-            await params.result_callback(
-                {"available": False, "reason": f"{bouquet_name} is sold out today."}
-            )
-            return
-        await params.result_callback({"available": True, "price": item["price"]})
-
-    async def add_to_order(
-        params: FunctionCallParams, bouquet_name: str, quantity: int = 1
-    ) -> None:
-        """Add a bouquet to the customer's order. Only call this after the
-        customer has confirmed they want this bouquet.
-
-        Args:
-            bouquet_name: The name of the bouquet to add, lowercase.
-            quantity: How many of this bouquet to add. Defaults to 1.
-        """
-        item = BOUQUETS.get(bouquet_name.lower())
-        if not item:
-            await params.result_callback(
-                {"ok": False, "reason": f"We don't carry a bouquet called '{bouquet_name}'."}
-            )
-            return
-        if not item["in_stock"]:
-            await params.result_callback(
-                {"ok": False, "reason": f"{bouquet_name} is sold out today."}
-            )
-            return
-        order["items"].append(
-            {"bouquet": bouquet_name.lower(), "quantity": quantity, "price": item["price"]}
-        )
-        await params.result_callback({"ok": True, "items": order["items"]})
-
-    async def get_order_summary(params: FunctionCallParams) -> None:
-        """Read back the current order: items, quantities, and running total."""
-        total = sum(line["price"] * line["quantity"] for line in order["items"])
+        state["profile"]["goal"] = goal.strip().lower()
         await params.result_callback(
-            {"items": order["items"], "total": round(total, 2), "delivery": order["delivery"]}
+            {"ok": True, "goal": state["profile"]["goal"], "missing": profile_missing(state)}
         )
 
-    async def set_delivery_details(
-        params: FunctionCallParams,
-        recipient_name: str,
-        address: str,
-        delivery_date: str,
-    ) -> None:
-        """Capture delivery details for the order.
+    async def set_diet_style(params: FunctionCallParams, diet_style: str) -> None:
+        """Record the member's diet style.
 
         Args:
-            recipient_name: Name of the person receiving the flowers.
-            address: Delivery street address.
-            delivery_date: Requested delivery date, in the customer's own words
-                (e.g. "Friday", "May 20th"). No parsing required.
+            diet_style: One of "omnivore", "vegetarian", "vegan", "keto", "paleo",
+                or "pescatarian".
         """
-        order["delivery"] = {
-            "recipient_name": recipient_name,
-            "address": address,
-            "delivery_date": delivery_date,
-        }
-        await params.result_callback({"ok": True, "delivery": order["delivery"]})
-
-    async def place_order(params: FunctionCallParams) -> None:
-        """Finalize the order. Only call this after the customer has confirmed
-        the items AND delivery details."""
-        if not order["items"]:
-            await params.result_callback({"ok": False, "reason": "No items in the order yet."})
-            return
-        if not order["delivery"]:
-            await params.result_callback({"ok": False, "reason": "Missing delivery details."})
-            return
-        total = sum(line["price"] * line["quantity"] for line in order["items"])
-        confirmation = f"FLW-{random.randint(100000, 999999)}"
-        logger.info(f"Order placed: {confirmation} total=${total:.2f} order={order}")
+        state["profile"]["diet_style"] = diet_style.strip().lower()
         await params.result_callback(
             {
                 "ok": True,
-                "confirmation_number": confirmation,
-                "total": round(total, 2),
-                "eta": "within 2 business days",
+                "diet_style": state["profile"]["diet_style"],
+                "missing": profile_missing(state),
+            }
+        )
+
+    async def set_restrictions(
+        params: FunctionCallParams,
+        allergies: list[str] | None = None,
+        restrictions: list[str] | None = None,
+    ) -> None:
+        """Record allergies and dietary restrictions. SAFETY-CRITICAL — these are
+        enforced on every meal suggestion, so capture them accurately.
+
+        Args:
+            allergies: Foods the member is allergic to, e.g. ["peanuts", "shellfish",
+                "dairy", "eggs", "soy", "gluten"].
+            restrictions: Lifestyle or religious restrictions, e.g. ["halal", "no pork",
+                "gluten-free"].
+        """
+        if allergies is not None:
+            state["profile"]["allergies"] = [a.strip().lower() for a in allergies]
+        if restrictions is not None:
+            state["profile"]["restrictions"] = [r.strip().lower() for r in restrictions]
+        # Calling this (even to record "none") clears the recommendation safety gate.
+        state["allergies_confirmed"] = True
+        await params.result_callback(
+            {
+                "ok": True,
+                "allergies": state["profile"]["allergies"],
+                "restrictions": state["profile"]["restrictions"],
+            }
+        )
+
+    async def set_activity_level(params: FunctionCallParams, activity_level: str) -> None:
+        """Record how active the member is.
+
+        Args:
+            activity_level: One of "sedentary", "light", "moderate", "active", or
+                "very_active".
+        """
+        state["profile"]["activity_level"] = activity_level.strip().lower()
+        await params.result_callback(
+            {
+                "ok": True,
+                "activity_level": state["profile"]["activity_level"],
+                "missing": profile_missing(state),
+            }
+        )
+
+    async def set_biometrics(
+        params: FunctionCallParams,
+        sex: str | None = None,
+        age: int | None = None,
+        height_cm: float | None = None,
+        weight_kg: float | None = None,
+    ) -> None:
+        """OPTIONAL — record body stats only if the member volunteers them. Improves
+        target accuracy (Mifflin–St Jeor). Never push for these.
+
+        Args:
+            sex: "male" or "female" (used for the BMR formula).
+            age: Age in years.
+            height_cm: Height in centimeters.
+            weight_kg: Weight in kilograms.
+        """
+        bio = state["profile"]["biometrics"]
+        if sex is not None:
+            bio["sex"] = sex.strip().lower()
+        if age is not None:
+            bio["age"] = age
+        if height_cm is not None:
+            bio["height_cm"] = height_cm
+        if weight_kg is not None:
+            bio["weight_kg"] = weight_kg
+        await params.result_callback({"ok": True, "biometrics": bio})
+
+    async def compute_targets(params: FunctionCallParams) -> None:
+        """Compute daily calorie + macro targets from the collected profile. Call once
+        goal, diet style, and activity level are set, then read the targets back to the
+        member for confirmation before recommending meals."""
+        missing = profile_missing(state)
+        if missing:
+            await params.result_callback(
+                {"ok": False, "missing": missing, "note": f"Still need: {', '.join(missing)}."}
+            )
+            return
+        targets = calc_targets(state["profile"])
+        state["profile"]["targets"] = {k: targets[k] for k in MACRO_KEYS}
+        await params.result_callback(
+            {"ok": True, "targets": state["profile"]["targets"], "basis": targets["basis"]}
+        )
+
+    # Daily recommendation ---------------------------------------------------
+
+    async def recommend_meals(
+        params: FunctionCallParams,
+        slot: str | None = None,
+        craving: str | None = None,
+        source_type: str | None = None,
+        max_results: int = 5,
+    ) -> None:
+        """Suggest meals that fit the member's REMAINING macros today, honoring their
+        diet style, allergies, and restrictions. Call when the member asks what to eat.
+
+        Args:
+            slot: "breakfast", "lunch", "dinner", or "snack". Optional.
+            craving: What they're in the mood for, e.g. "chicken", "pasta", "sushi".
+                Optional.
+            source_type: "restaurant", "recipe", or "ready-to-eat" if they specify how
+                they want it. Optional.
+            max_results: Max meals to return (hard-capped at 5).
+        """
+        rem = remaining_macros(state)
+        if rem is None:
+            await params.result_callback(
+                {
+                    "meals": [],
+                    "note": "No targets yet — run the short intake and call compute_targets first.",
+                }
+            )
+            return
+        if not state.get("allergies_confirmed"):
+            await params.result_callback(
+                {
+                    "meals": [],
+                    "note": "Ask about allergies and restrictions first, then call set_restrictions (even to record none) before recommending.",
+                }
+            )
+            return
+        p = state["profile"]
+        meals = find_meals(
+            remaining={k: rem[k] for k in MACRO_KEYS},
+            diet_style=p["diet_style"],
+            allergies=p["allergies"],
+            restrictions=p["restrictions"],
+            craving=craving,
+            source_type=source_type,
+            slot=slot,
+            max_results=min(max_results, 5),
+        )
+        await params.result_callback({"meals": meals, "remaining": rem})
+
+    # Adaptation / re-optimization ------------------------------------------
+
+    async def log_meal(
+        params: FunctionCallParams,
+        name: str | None = None,
+        calories: int | None = None,
+        protein_g: int | None = None,
+        carbs_g: int | None = None,
+        fat_g: int | None = None,
+        slot: str | None = None,
+    ) -> None:
+        """Record a meal the member ATE (or swapped/added). If the member states any
+        macros, those are used (any they don't give default to zero); otherwise, if
+        `name` matches the catalog, macros are filled from it. Recomputes remaining
+        macros so you can re-optimize the rest of the day.
+
+        Args:
+            name: Meal name (matched against the catalog when no macros are given).
+            calories: Calories the member states they ate. Optional.
+            protein_g: Protein grams. Optional.
+            carbs_g: Carb grams. Optional.
+            fat_g: Fat grams. Optional.
+            slot: Which meal this was ("breakfast", "lunch", "dinner", "snack"). Optional.
+        """
+        macros = None
+        if any(v is not None for v in (calories, protein_g, carbs_g, fat_g)):
+            macros = {
+                "calories": calories or 0,
+                "protein_g": protein_g or 0,
+                "carbs_g": carbs_g or 0,
+                "fat_g": fat_g or 0,
+            }
+        elif name:
+            m = get_meal(name)
+            if m:
+                macros = {k: m["macros"][k] for k in MACRO_KEYS}
+        if macros is None:
+            await params.result_callback(
+                {
+                    "ok": False,
+                    "note": "Need either a known meal name or the calories/protein for what they ate.",
+                }
+            )
+            return
+        entry = {"name": name or "logged meal", "slot": slot, **macros}
+        state["log"]["meals"].append(entry)
+        rem = remaining_macros(state)
+        status = "over" if (rem and rem["calories"] < 0) else "on_track"
+        await params.result_callback({"ok": True, "logged": entry, "remaining": rem, "status": status})
+
+    async def reoptimize_day(params: FunctionCallParams, note: str | None = None) -> None:
+        """Re-plan the rest of the day after a deviation (skipped, over-ate, ate out).
+        Reads current remaining macros and returns meal options that bring the day back
+        on target.
+
+        Args:
+            note: What happened, e.g. "skipped lunch" or "had a burger out". Optional.
+        """
+        rem = remaining_macros(state)
+        if rem is None:
+            await params.result_callback(
+                {"options": [], "note": "No targets yet — run intake first."}
+            )
+            return
+        if not state.get("allergies_confirmed"):
+            await params.result_callback(
+                {
+                    "options": [],
+                    "note": "Confirm allergies first (call set_restrictions), then re-optimize.",
+                }
+            )
+            return
+        p = state["profile"]
+        options = find_meals(
+            remaining={k: rem[k] for k in MACRO_KEYS},
+            diet_style=p["diet_style"],
+            allergies=p["allergies"],
+            restrictions=p["restrictions"],
+            max_results=4,
+        )
+        if rem["calories"] < 0:
+            strategy = "over"
+        elif rem["calories"] < 500:
+            strategy = "light"
+        else:
+            strategy = "normal"
+        await params.result_callback({"remaining": rem, "options": options, "strategy": strategy})
+
+    async def get_summary(params: FunctionCallParams) -> None:
+        """Read back the day: targets, meals logged with macros, and remaining macros."""
+        await params.result_callback(
+            {
+                "targets": state["profile"]["targets"],
+                "meals": state["log"]["meals"],
+                "remaining": remaining_macros(state),
             }
         )
 
     async def end_call(params: FunctionCallParams) -> None:
-        """End the call. Only call this AFTER you have said goodbye to the
-        customer in the same turn. The pipeline will flush any queued speech
-        and then hang up."""
+        """End the call. Only call this AFTER you have said goodbye to the member in the
+        same turn. The pipeline will flush any queued speech and then hang up."""
         logger.info("end_call invoked — pushing EndTaskFrame upstream")
         await params.llm.push_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
         # run_llm=False prevents the LLM from generating a follow-up response
@@ -281,102 +470,40 @@ async def run_bot(
         )
 
     tool_functions = [
-        list_bouquets,
-        check_availability,
-        add_to_order,
-        get_order_summary,
-        set_delivery_details,
-        place_order,
+        set_goal,
+        set_diet_style,
+        set_restrictions,
+        set_activity_level,
+        set_biometrics,
+        compute_targets,
+        recommend_meals,
+        log_meal,
+        reoptimize_day,
+        get_summary,
         end_call,
     ]
     tools = ToolsSchema(standard_tools=tool_functions)
 
     # --- System instruction (varies based on caller ID) ---------------------
 
-    customer = KNOWN_CUSTOMERS.get(from_number or "")
-    if customer:
-        caller_context = (
-            f"This caller is a returning customer (caller ID matched). On file: "
-            f"name {customer['name']}, last order the {customer['last_order']} bouquet. "
-            'Greet them generically: "Welcome back to Field & Flower! How can I help '
-            'today?" Do not use their name or mention their last order in the greeting; '
-            "that comes across as surveilling. Once they say they want flowers, you "
-            "can offer their last order as a helpful shortcut, framed as record-keeping: "
-            f'"I have you down for the {customer["last_order"]} last time, want that '
-            'again or something different?" Always give them the alternative.'
-        )
-    else:
-        caller_context = (
-            "You're talking to a new customer. Introduce the shop briefly and ask how you can help."
-        )
-
-    system_instruction = (
-        "You are a friendly order-taker for Field & Flower, a neighborhood flower shop. "
-        "Help callers pick a bouquet and arrange delivery. Use the tools to look up "
-        "bouquets, check stock, add items, capture delivery details, and place the order. "
-        "Confirm the full order before calling place_order.\n\n"
-        "Talk like a real shop clerk on the phone — not a chatbot:\n"
-        "- Keep it to 1–2 short sentences per turn. Longer only when listing options or "
-        "doing the final order read-back.\n"
-        "- Ask ONE thing at a time. Don't ask for name, address, and date in one breath — "
-        "ask for the name, wait, then the next.\n"
-        '- Skip filler openers like "Absolutely!", "That sounds lovely!", "Perfect!", '
-        '"I\'d be happy to" — go straight to the point.\n'
-        "- Describe bouquets plainly. \"A dozen red roses with baby's breath, sixty-five "
-        'dollars." Not "a classic, romantic bouquet showing love and appreciation."\n'
-        "- When listing bouquets, ALWAYS lead with the bouquet's name. Format: "
-        '"<Name> — <description>, <price>." For example: "Spring Sunshine — yellow tulips '
-        'and daffodils, forty-five dollars." The name is how the caller refers back to it.\n'
-        "- When the caller mentions an occasion (birthday, Mother's Day, anniversary, "
-        "sympathy, etc.) or asks about specials/deals, pass those as filters to "
-        'list_bouquets (occasion="..." or specials_only=True) instead of reading the '
-        "full catalog. Don't list 15 bouquets when 3 are relevant.\n"
-        "- The catalog has many options — when listing, name at most 4 or 5 at a time. "
-        "If the caller doesn't bite, offer to share more.\n"
-        "- Don't restate what the customer just said back to them, except in the final "
-        "order confirmation.\n"
-        "- Use contractions. Fragments are fine.\n\n"
-        "Responses are spoken aloud. No bullet points, no emojis. Read prices in words "
-        '("forty-five dollars", not "$45.00").\n\n'
-        "When the order is placed and the customer has no more requests, or when they say "
-        'goodbye: say a short closing line (e.g. "Thanks, have a great day!") AND call '
-        "end_call in the same turn. Never call end_call without saying goodbye first.\n\n"
-        f"Today is {date.today().strftime('%A, %B %d, %Y')}. Use this when the caller "
-        'gives a relative delivery date like "this Friday" or "next Tuesday".\n\n'
-        f"Caller context: {caller_context}"
-    )
+    caller_context = build_caller_context(member)
+    system_instruction = build_system_instruction(caller_context)
 
     # Speech-to-Text service
     #
     # Nemotron Speech Streaming STT, served over WebSocket. The server expects
-    # 16-bit PCM, 16 kHz, mono — matching the WebRTC input path. The URL can be
-    # overridden via NVIDIA_ASR_URL.
+    # 16-bit PCM, 16 kHz, mono; the service resamples input audio to that rate, so
+    # both the WebRTC (16 kHz) and Twilio telephony (8 kHz) paths work. The URL can
+    # be overridden via NVIDIA_ASR_URL.
     stt = NVidiaWebSocketSTTService(
         url=os.getenv("NVIDIA_ASR_URL", "ws://192.168.7.228:8081"),
         strip_interim_prefix=True,
     )
 
     # LLM service — Nemotron-3-Super-120B served by vLLM (OpenAI-compatible chat
-    # completions at /v1). vLLM exposes the Chat Completions API, not the Responses
-    # API, so we use OpenAILLMService (not OpenAIResponsesLLMService). The live
-    # endpoint serves the model as "nemotron-3-super" (per its /v1/models).
-    #
-    # Reasoning ("thinking") toggle — Nemotron is controlled per-request via
-    # chat_template_kwargs.enable_thinking, forwarded through the OpenAI client's
-    # extra_body (the request-body convention confirmed against this endpoint in
-    # ../aiewf-eval traces). Default OFF for low-latency voice. To ENABLE, set
-    # NEMOTRON_ENABLE_THINKING=true; to DISABLE, leave unset/false.
-    #
-    # CAUTION for voice: reasoning is only kept out of the spoken `content` if the
-    # vLLM server runs a reasoning parser (e.g. --reasoning-parser nemotron_v3, which
-    # routes it to a separate `reasoning_content` field). This live endpoint did NOT
-    # surface reasoning_content in testing, so if thinking is enabled and the server
-    # lacks a parser, chain-of-thought would appear inline in `content` and get
-    # spoken. Keep thinking OFF for voice unless the parser is confirmed active.
-    # VLLMOpenAILLMService is a thin OpenAILLMService subclass that reports TTFB to
-    # the first NON-THINKING token (so the metric reflects time-to-first-spoken-word
-    # when reasoning is enabled, not time-to-first-reasoning-token). No-op when
-    # thinking is off. See server/nemotron_llm.py.
+    # completions at /v1). Reasoning ("thinking") defaults OFF for low-latency voice;
+    # set NEMOTRON_ENABLE_THINKING=true to enable. VLLMOpenAILLMService reports TTFB to
+    # the first non-thinking token. See server/nemotron_llm.py.
     enable_thinking = os.getenv("NEMOTRON_ENABLE_THINKING", "false").lower() == "true"
     llm = VLLMOpenAILLMService(
         api_key=os.getenv("NEMOTRON_LLM_API_KEY", "EMPTY"),  # vLLM ignores unless --api-key set
@@ -440,7 +567,7 @@ async def run_bot(
         context.add_message(
             {
                 "role": "user",
-                "content": "A customer just called. Greet them, 'This is Field & Flower, your local flower shop. How can I help you today?'",
+                "content": "A member just connected. Greet them: 'This is your Tetris nutrition coach. What can I help you fit in today?'",
             }
         )
         await worker.queue_frames([LLMRunFrame()])
@@ -492,7 +619,7 @@ async def bot(runner_args: RunnerArguments):
             _, call_data = await parse_telephony_websocket(runner_args.websocket)
 
             # Fetch call information from Twilio REST API so we can personalize
-            # the bot for known customers (see KNOWN_CUSTOMERS).
+            # the bot for known members (see KNOWN_MEMBERS).
             call_info = await get_call_info(call_data["call_id"])
             if call_info:
                 from_number = call_info.get("from_number")
