@@ -16,8 +16,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev
 
 # Copy the application code
-COPY ./bot.py bot.py
-COPY ./bot-nemotron.py bot-nemotron.py
+# Pipecat Cloud's base image runs `bot.py`, so the nemotron entrypoint is copied to that name.
+COPY ./bot-nemotron.py bot.py
+COPY ./mock_backend.py mock_backend.py
 COPY ./nemotron_llm.py nemotron_llm.py
 COPY ./nvidia_stt.py nvidia_stt.py
-COPY ./mock_backend.py mock_backend.py
