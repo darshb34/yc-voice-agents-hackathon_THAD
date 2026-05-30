@@ -159,15 +159,21 @@ def _seed_from_env() -> bool:
 def load_state(seed: bool = True) -> dict:
     """Hydrate per-call state at boot.
 
-    Returns {"profile", "log", "is_returning"}: ``profile`` is the loaded durable
-    profile or a blank one; ``log`` is today's meal log; ``is_returning`` is True
-    when the user has already onboarded (profile has computed targets).
+    Per-call isolation: a fresh call starts BLANK so leftover state from a prior
+    call on a reused (warm) instance can't bleed in — which otherwise makes a new
+    caller hear "you're already set up". Stored profile/log are loaded only when
+    this call was explicitly seeded (``COACH_SEED_JSON`` — returning-member eval)
+    or persistence is opted into (``COACH_PERSIST`` — real single-user product use).
+
+    Returns {"profile", "log", "is_returning"}.
     """
-    if seed:
-        _seed_from_env()
-    profile = load_profile()
+    seeded = _seed_from_env() if seed else False
+    persist = os.environ.get("COACH_PERSIST", "").lower() in ("1", "true", "yes")
+    use_stored = seeded or persist
+    profile = load_profile() if use_stored else None
+    log = load_today_log() if use_stored else {"date": date.today().isoformat(), "meals": []}
     return {
         "profile": profile or blank_profile(),
-        "log": load_today_log(),
+        "log": log,
         "is_returning": bool(profile and profile.get("targets") and profile.get("goal")),
     }

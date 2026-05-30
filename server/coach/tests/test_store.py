@@ -20,6 +20,7 @@ def _fresh_dir():
     d = tempfile.mkdtemp(prefix="coachtest_")
     os.environ["COACH_DATA_DIR"] = d
     os.environ.pop("COACH_SEED_JSON", None)
+    os.environ.pop("COACH_PERSIST", None)
     return d
 
 
@@ -42,7 +43,12 @@ def test_save_and_load_profile_roundtrip():
     loaded = store.load_profile()
     assert loaded["name"] == "Sam" and loaded["goal"] == "cut"
     assert loaded["targets"]["calories"] == 1870
-    assert store.load_state()["is_returning"] is True  # has goal + targets
+    # Per-call isolation: a fresh call must NOT inherit stored state (no bleed)...
+    assert store.load_state()["is_returning"] is False
+    # ...unless persistence is explicitly opted into (real single-user product use).
+    os.environ["COACH_PERSIST"] = "1"
+    assert store.load_state()["is_returning"] is True
+    os.environ.pop("COACH_PERSIST", None)
 
 
 def test_append_meal_accumulates_today():
