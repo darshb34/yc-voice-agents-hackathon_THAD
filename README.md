@@ -80,7 +80,7 @@ Get the bot running over WebRTC in your browser before you push to the cloud or 
 
    ```bash
    git clone git@github.com:darshb34/yc-voice-agents-hackathon_THAD.git
-   cd yc-voice-agents-hackathon/server
+   cd yc-voice-agents-hackathon_THAD/server
    ```
 
 2. **Configure API keys:**
