@@ -79,7 +79,7 @@ Get the bot running over WebRTC in your browser before you push to the cloud or 
 1. **Clone and enter the server directory:**
 
    ```bash
-   git clone https://github.com/pipecat-ai/yc-voice-agents-hackathon.git
+   git clone git@github.com:darshb34/yc-voice-agents-hackathon_THAD.git
    cd yc-voice-agents-hackathon/server
    ```
 
