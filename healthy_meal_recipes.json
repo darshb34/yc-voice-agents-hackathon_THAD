@@ -1,0 +1,542 @@
+{
+  "meta": {
+    "title": "Healthy Meal Recipes",
+    "version": "1.0",
+    "recipe_count": 12,
+    "disclaimer": "Nutrition values are estimates based on standard ingredient quantities and typical brands. Actual values vary with portion size, substitutions, and exact products.",
+    "macro_formula": "calories ~= (protein_g * 4) + (carbs_g * 4) + (fat_g * 9)",
+    "diet_tags": {
+      "vegan": "No animal products of any kind",
+      "vegetarian": "No meat or fish; may include dairy and/or eggs",
+      "pescatarian": "No meat, but includes fish/seafood",
+      "omnivore": "Includes poultry/meat (lean cuts used here)",
+      "gluten_free": "Gluten-free as written unless a swap is noted",
+      "dairy_free": "Dairy-free as written unless a swap is noted"
+    },
+    "field_notes": {
+      "gluten_free": "Boolean reflects the recipe AS WRITTEN. See gluten_free_adaptable + notes for swaps.",
+      "dairy_free": "Boolean reflects the recipe AS WRITTEN. See dairy_free_adaptable + notes for swaps."
+    }
+  },
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Lemon-Herb Baked Salmon with Quinoa & Asparagus",
+      "diet_category": "Pescatarian",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 2,
+      "prep_min": 10,
+      "cook_min": 20,
+      "total_min": 30,
+      "nutrition_per_serving": {
+        "calories": 520,
+        "protein_g": 42,
+        "fat_g": 24,
+        "carbs_g": 32,
+        "fiber_g": 6
+      },
+      "allergens": ["Fish"],
+      "main_ingredients": ["salmon fillets", "quinoa", "asparagus", "lemon", "olive oil", "garlic", "dill"],
+      "ingredients": [
+        "2 salmon fillets (6 oz each)",
+        "1/2 cup dry quinoa, rinsed",
+        "1 bunch asparagus, trimmed",
+        "1 lemon (juice + zest)",
+        "2 tbsp olive oil",
+        "2 cloves garlic, minced",
+        "1 tbsp fresh dill, chopped",
+        "Salt & pepper to taste"
+      ],
+      "instructions": [
+        "Preheat oven to 400F (205C). Cook quinoa in 1 cup water ~15 min, then fluff.",
+        "Place salmon and asparagus on a lined sheet pan. Drizzle with olive oil, garlic, lemon juice/zest, salt, and pepper.",
+        "Bake 12-15 min until salmon flakes easily and asparagus is tender-crisp.",
+        "Top salmon with fresh dill and serve over quinoa."
+      ],
+      "why_healthy": "Omega-3 rich salmon, complete-protein quinoa, fiber from asparagus.",
+      "notes": null
+    },
+    {
+      "id": 2,
+      "name": "Chickpea & Quinoa Power Bowl with Tahini Dressing",
+      "diet_category": "Vegan",
+      "is_vegan": true,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 2,
+      "prep_min": 15,
+      "cook_min": 15,
+      "total_min": 30,
+      "nutrition_per_serving": {
+        "calories": 480,
+        "protein_g": 19,
+        "fat_g": 20,
+        "carbs_g": 58,
+        "fiber_g": 14
+      },
+      "allergens": ["Sesame"],
+      "main_ingredients": ["chickpeas", "quinoa", "spinach", "cherry tomatoes", "cucumber", "red onion", "tahini"],
+      "ingredients": [
+        "1 can (15 oz) chickpeas, drained and rinsed",
+        "1/2 cup dry quinoa, rinsed",
+        "2 cups baby spinach",
+        "1 cup cherry tomatoes, halved",
+        "1/2 cucumber, diced",
+        "1/4 red onion, thinly sliced",
+        "Dressing: 2 tbsp tahini, 1 tbsp lemon juice, 1 clove garlic, 2-3 tbsp water, salt"
+      ],
+      "instructions": [
+        "Cook quinoa in 1 cup water ~15 min; let cool slightly.",
+        "Optional: roast chickpeas at 425F for 20 min with olive oil and paprika for crunch.",
+        "Whisk tahini, lemon, garlic, water, and salt into a pourable dressing.",
+        "Assemble bowls with quinoa, spinach, tomatoes, cucumber, onion, and chickpeas. Drizzle with dressing."
+      ],
+      "why_healthy": "Plant protein + fiber from chickpeas and quinoa, healthy fats from tahini.",
+      "notes": null
+    },
+    {
+      "id": 3,
+      "name": "Tofu & Broccoli Stir-Fry with Brown Rice",
+      "diet_category": "Vegan",
+      "is_vegan": true,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": false,
+      "gluten_free_adaptable": true,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 3,
+      "prep_min": 15,
+      "cook_min": 15,
+      "total_min": 30,
+      "nutrition_per_serving": {
+        "calories": 430,
+        "protein_g": 22,
+        "fat_g": 16,
+        "carbs_g": 52,
+        "fiber_g": 8
+      },
+      "allergens": ["Soy", "Sesame", "Wheat"],
+      "main_ingredients": ["extra-firm tofu", "broccoli", "red bell pepper", "brown rice", "soy sauce", "sesame oil", "ginger", "garlic"],
+      "ingredients": [
+        "14 oz extra-firm tofu, cubed and pressed",
+        "4 cups broccoli florets",
+        "1 red bell pepper, sliced",
+        "1 cup dry brown rice",
+        "3 tbsp low-sodium soy sauce or tamari",
+        "1 tbsp sesame oil",
+        "1 tbsp grated ginger",
+        "2 cloves garlic, minced",
+        "1 tsp cornstarch + 2 tbsp water"
+      ],
+      "instructions": [
+        "Cook brown rice per package (~40 min, or use a rice cooker).",
+        "Pan-sear tofu in a little oil until golden on all sides; set aside.",
+        "Stir-fry broccoli and pepper with ginger and garlic 4-5 min.",
+        "Add soy sauce, sesame oil, and cornstarch slurry; return tofu and toss until glossy. Serve over rice."
+      ],
+      "why_healthy": "High plant protein, whole-grain rice, minimal added fat.",
+      "notes": "Use tamari instead of soy sauce to make this gluten-free."
+    },
+    {
+      "id": 4,
+      "name": "Red Lentil & Coconut Curry",
+      "diet_category": "Vegan",
+      "is_vegan": true,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 4,
+      "prep_min": 10,
+      "cook_min": 25,
+      "total_min": 35,
+      "nutrition_per_serving": {
+        "calories": 390,
+        "protein_g": 16,
+        "fat_g": 14,
+        "carbs_g": 50,
+        "fiber_g": 12
+      },
+      "allergens": ["Tree nut (coconut)"],
+      "main_ingredients": ["red lentils", "coconut milk", "onion", "garlic", "ginger", "curry powder", "diced tomatoes", "spinach"],
+      "ingredients": [
+        "1.5 cups dry red lentils, rinsed",
+        "1 can (14 oz) light coconut milk",
+        "1 onion, diced",
+        "3 cloves garlic, minced",
+        "1 tbsp grated ginger",
+        "2 tbsp curry powder, 1 tsp turmeric",
+        "1 can (14 oz) diced tomatoes",
+        "3 cups baby spinach",
+        "2 cups vegetable broth"
+      ],
+      "instructions": [
+        "Saute onion, garlic, and ginger until soft. Stir in curry powder and turmeric for 1 min.",
+        "Add lentils, tomatoes, coconut milk, and broth. Simmer 18-20 min until lentils break down.",
+        "Stir in spinach until wilted. Season with salt; serve over rice or with naan."
+      ],
+      "why_healthy": "Lentils provide protein, iron, and fiber; turmeric and ginger are anti-inflammatory.",
+      "notes": null
+    },
+    {
+      "id": 5,
+      "name": "Greek Yogurt Breakfast Bowl with Berries & Almonds",
+      "diet_category": "Vegetarian",
+      "is_vegan": false,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": false,
+      "dairy_free_adaptable": true,
+      "servings": 1,
+      "prep_min": 5,
+      "cook_min": 0,
+      "total_min": 5,
+      "nutrition_per_serving": {
+        "calories": 360,
+        "protein_g": 24,
+        "fat_g": 14,
+        "carbs_g": 38,
+        "fiber_g": 7
+      },
+      "allergens": ["Dairy", "Tree nut (almond)"],
+      "main_ingredients": ["nonfat Greek yogurt", "mixed berries", "almonds", "chia seeds", "honey"],
+      "ingredients": [
+        "1 cup plain nonfat Greek yogurt",
+        "3/4 cup mixed berries",
+        "2 tbsp sliced almonds",
+        "1 tbsp chia seeds",
+        "1 tsp honey (optional)"
+      ],
+      "instructions": [
+        "Spoon yogurt into a bowl.",
+        "Top with berries, almonds, and chia seeds.",
+        "Drizzle with honey if desired and serve."
+      ],
+      "why_healthy": "High-protein yogurt, antioxidant berries, no added sugar (honey optional).",
+      "notes": "Swap in a plant-based yogurt to make this vegan/dairy-free (macros will shift)."
+    },
+    {
+      "id": 6,
+      "name": "Mediterranean Baked Cod with Tomatoes & Olives",
+      "diet_category": "Pescatarian",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 2,
+      "prep_min": 10,
+      "cook_min": 20,
+      "total_min": 30,
+      "nutrition_per_serving": {
+        "calories": 340,
+        "protein_g": 38,
+        "fat_g": 14,
+        "carbs_g": 12,
+        "fiber_g": 3
+      },
+      "allergens": ["Fish"],
+      "main_ingredients": ["cod fillets", "cherry tomatoes", "Kalamata olives", "olive oil", "garlic", "oregano", "lemon"],
+      "ingredients": [
+        "2 cod fillets (6 oz each)",
+        "1 cup cherry tomatoes, halved",
+        "1/4 cup Kalamata olives, pitted",
+        "2 tbsp olive oil",
+        "2 cloves garlic, sliced",
+        "1 tsp dried oregano",
+        "1/2 lemon, juiced",
+        "Fresh parsley"
+      ],
+      "instructions": [
+        "Preheat oven to 400F (205C).",
+        "Place cod in a baking dish; surround with tomatoes, olives, and garlic.",
+        "Drizzle with olive oil, lemon, and oregano; season with salt and pepper.",
+        "Bake 18-20 min until cod is opaque and flakes. Garnish with parsley."
+      ],
+      "why_healthy": "Lean white fish, low-carb, heart-healthy olive oil and vegetables.",
+      "notes": null
+    },
+    {
+      "id": 7,
+      "name": "Grilled Chicken & Vegetables with Roasted Sweet Potato",
+      "diet_category": "Omnivore",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": false,
+      "is_omnivore": true,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 2,
+      "prep_min": 15,
+      "cook_min": 25,
+      "total_min": 40,
+      "nutrition_per_serving": {
+        "calories": 480,
+        "protein_g": 45,
+        "fat_g": 14,
+        "carbs_g": 42,
+        "fiber_g": 7
+      },
+      "allergens": [],
+      "main_ingredients": ["chicken breast", "sweet potato", "zucchini", "red bell pepper", "olive oil", "smoked paprika"],
+      "ingredients": [
+        "2 boneless skinless chicken breasts (6 oz each)",
+        "2 medium sweet potatoes, cubed",
+        "1 zucchini, sliced",
+        "1 red bell pepper, sliced",
+        "2 tbsp olive oil",
+        "1 tsp smoked paprika, 1 tsp garlic powder",
+        "Salt & pepper"
+      ],
+      "instructions": [
+        "Preheat oven to 425F (220C). Toss sweet potatoes with 1 tbsp oil and roast 25 min.",
+        "Season chicken with paprika, garlic powder, salt, and pepper; grill or pan-sear ~6 min per side to 165F internal.",
+        "Saute zucchini and pepper in remaining oil until tender-crisp.",
+        "Slice chicken and plate with vegetables and sweet potato."
+      ],
+      "why_healthy": "Lean protein, complex carbs from sweet potato, no refined ingredients.",
+      "notes": null
+    },
+    {
+      "id": 8,
+      "name": "Ahi Tuna Poke Bowl",
+      "diet_category": "Pescatarian",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": false,
+      "gluten_free_adaptable": true,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 2,
+      "prep_min": 20,
+      "cook_min": 15,
+      "total_min": 35,
+      "nutrition_per_serving": {
+        "calories": 510,
+        "protein_g": 34,
+        "fat_g": 16,
+        "carbs_g": 55,
+        "fiber_g": 6
+      },
+      "allergens": ["Fish", "Soy", "Sesame"],
+      "main_ingredients": ["sushi-grade ahi tuna", "rice", "avocado", "edamame", "cucumber", "carrot", "soy sauce"],
+      "ingredients": [
+        "10 oz sushi-grade ahi tuna, cubed",
+        "1 cup dry sushi or brown rice",
+        "1 avocado, sliced",
+        "1/2 cup shelled edamame",
+        "1/2 cucumber, diced",
+        "1/4 cup shredded carrot",
+        "Marinade: 2 tbsp soy sauce, 1 tsp sesame oil, 1 tsp rice vinegar, scallions, sesame seeds"
+      ],
+      "instructions": [
+        "Cook rice and let cool slightly.",
+        "Toss tuna gently in the marinade; chill 10 min. Keep tuna cold and use it the same day.",
+        "Build bowls with rice, tuna, avocado, edamame, cucumber, and carrot.",
+        "Garnish with extra scallions and sesame seeds."
+      ],
+      "why_healthy": "Lean raw tuna, healthy fats from avocado, balanced macros.",
+      "notes": "Use tamari instead of soy sauce to make this gluten-free. Requires sushi-grade fish kept cold and used same-day."
+    },
+    {
+      "id": 9,
+      "name": "Black Bean & Sweet Potato Tacos",
+      "diet_category": "Vegan",
+      "is_vegan": true,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": true,
+      "dairy_free_adaptable": false,
+      "servings": 3,
+      "serving_note": "2 tacos per serving",
+      "prep_min": 15,
+      "cook_min": 25,
+      "total_min": 40,
+      "nutrition_per_serving": {
+        "calories": 410,
+        "protein_g": 14,
+        "fat_g": 12,
+        "carbs_g": 64,
+        "fiber_g": 14
+      },
+      "allergens": ["Corn"],
+      "main_ingredients": ["sweet potatoes", "black beans", "corn tortillas", "avocado", "cumin", "chili powder", "lime"],
+      "ingredients": [
+        "2 medium sweet potatoes, diced",
+        "1 can (15 oz) black beans, drained and rinsed",
+        "6 small corn tortillas",
+        "1 tbsp olive oil",
+        "1 tsp cumin, 1 tsp chili powder, 1/2 tsp smoked paprika",
+        "1 avocado",
+        "Lime, cilantro, and salsa to serve"
+      ],
+      "instructions": [
+        "Preheat oven to 425F (220C). Toss sweet potato with oil and spices; roast 25 min.",
+        "Warm black beans with a pinch of cumin and salt.",
+        "Char tortillas in a dry pan.",
+        "Fill tortillas with sweet potato, beans, avocado, cilantro, salsa, and a squeeze of lime."
+      ],
+      "why_healthy": "High fiber and plant protein, beta-carotene from sweet potato, no animal fat.",
+      "notes": null
+    },
+    {
+      "id": 10,
+      "name": "Turkey & Quinoa Stuffed Bell Peppers",
+      "diet_category": "Omnivore",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": false,
+      "is_omnivore": true,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": false,
+      "dairy_free_adaptable": true,
+      "servings": 4,
+      "prep_min": 15,
+      "cook_min": 35,
+      "total_min": 50,
+      "nutrition_per_serving": {
+        "calories": 380,
+        "protein_g": 32,
+        "fat_g": 14,
+        "carbs_g": 32,
+        "fiber_g": 6
+      },
+      "allergens": ["Dairy (optional cheese topping)"],
+      "main_ingredients": ["bell peppers", "lean ground turkey", "quinoa", "diced tomatoes", "onion", "garlic", "mozzarella (optional)"],
+      "ingredients": [
+        "4 large bell peppers, halved and seeded",
+        "1 lb lean (93%) ground turkey",
+        "3/4 cup dry quinoa, rinsed",
+        "1 can (14 oz) diced tomatoes",
+        "1 onion, diced; 2 cloves garlic",
+        "1 tsp cumin, 1 tsp oregano",
+        "Optional: 1/2 cup shredded mozzarella"
+      ],
+      "instructions": [
+        "Preheat oven to 375F (190C). Cook quinoa in 1.5 cups water ~15 min.",
+        "Brown turkey with onion and garlic; add tomatoes, cumin, oregano, and cooked quinoa.",
+        "Stuff pepper halves with the mixture; top with cheese if using.",
+        "Bake 25-30 min until peppers are tender."
+      ],
+      "why_healthy": "Lean ground turkey, fiber-rich quinoa and peppers, portion-controlled.",
+      "notes": "Omit the cheese to make this dairy-free."
+    },
+    {
+      "id": 11,
+      "name": "Shrimp & Zucchini Noodle Bowl with Pesto",
+      "diet_category": "Pescatarian",
+      "is_vegan": false,
+      "is_vegetarian": false,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": false,
+      "dairy_free_adaptable": true,
+      "servings": 2,
+      "prep_min": 15,
+      "cook_min": 10,
+      "total_min": 25,
+      "nutrition_per_serving": {
+        "calories": 360,
+        "protein_g": 30,
+        "fat_g": 22,
+        "carbs_g": 14,
+        "fiber_g": 4
+      },
+      "allergens": ["Shellfish", "Tree nut (pine nuts)", "Dairy (parmesan in pesto)"],
+      "main_ingredients": ["shrimp", "zucchini", "basil pesto", "cherry tomatoes", "olive oil", "garlic", "lemon"],
+      "ingredients": [
+        "12 oz raw shrimp, peeled and deveined",
+        "3 medium zucchini, spiralized",
+        "1/4 cup basil pesto",
+        "1 cup cherry tomatoes, halved",
+        "1 tbsp olive oil",
+        "1 clove garlic",
+        "Lemon and black pepper"
+      ],
+      "instructions": [
+        "Saute shrimp with garlic in olive oil 2-3 min per side until pink; remove.",
+        "Add zucchini noodles to the pan and cook 2 min until just tender (do not overcook).",
+        "Toss noodles with pesto and tomatoes; return shrimp.",
+        "Finish with lemon and black pepper."
+      ],
+      "why_healthy": "High protein, very low carb, vegetable-based noodles.",
+      "notes": "Use a dairy-free / vegan pesto to make this dairy-free."
+    },
+    {
+      "id": 12,
+      "name": "Spinach, Mushroom & Feta Egg-White Frittata",
+      "diet_category": "Vegetarian",
+      "is_vegan": false,
+      "is_vegetarian": true,
+      "is_pescatarian": true,
+      "is_omnivore": false,
+      "gluten_free": true,
+      "gluten_free_adaptable": false,
+      "dairy_free": false,
+      "dairy_free_adaptable": true,
+      "servings": 4,
+      "prep_min": 10,
+      "cook_min": 20,
+      "total_min": 30,
+      "nutrition_per_serving": {
+        "calories": 220,
+        "protein_g": 20,
+        "fat_g": 12,
+        "carbs_g": 8,
+        "fiber_g": 2
+      },
+      "allergens": ["Egg", "Dairy"],
+      "main_ingredients": ["egg whites", "eggs", "spinach", "mushrooms", "feta", "onion", "olive oil"],
+      "ingredients": [
+        "8 egg whites + 2 whole eggs",
+        "2 cups baby spinach",
+        "1 cup mushrooms, sliced",
+        "1/3 cup crumbled feta",
+        "1/4 onion, diced",
+        "1 tbsp olive oil",
+        "Salt & pepper"
+      ],
+      "instructions": [
+        "Preheat oven to 375F (190C). In an oven-safe skillet, saute onion and mushrooms until soft.",
+        "Add spinach until wilted.",
+        "Whisk eggs and egg whites with salt and pepper; pour over vegetables. Sprinkle feta on top.",
+        "Cook 2 min on the stovetop, then transfer to the oven 15 min until set. Slice into 4 wedges."
+      ],
+      "why_healthy": "High protein, low carb, loaded with vegetables; great make-ahead meal.",
+      "notes": "Omit feta for dairy-free (macros will shift)."
+    }
+  ]
+}
