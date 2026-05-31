@@ -1,7 +1,8 @@
 # Tetris Nutrition Coach — a voice dietitian that adapts when life happens
-
+ [Team: Harshit, Albert, Darshan YHAD]
 **A YC Voice Agents Hackathon submission** — hosted by [Cekura](https://cekura.com) and [Daily](https://daily.co), with [NVIDIA](https://nvidia.com), [AWS](https://aws.amazon.com), and [Twilio](https://twilio.com).
 
+Video demo Link: https://youtu.be/nbjojsE1dVo
 GITHUB: https://github.com/darshb34/yc-voice-agents-hackathon_THAD
 Branch : cekura-eval-pipeline
 
