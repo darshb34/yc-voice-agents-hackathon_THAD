@@ -44,7 +44,6 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
-from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
@@ -55,6 +54,8 @@ from nutrition_backend import (
     calc_targets,
     find_meals,
     get_meal,
+)
+from nutrition_backend import (
     search_restaurants as search_restaurants_online,
 )
 
@@ -589,17 +590,10 @@ async def run_bot(
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(confidence=0.8, start_secs=0.3, stop_secs=0.4, min_volume=0.6)
             ),
-            # Turn-taking. We deliberately do NOT use FilterIncompleteUserTurnStrategies
-            # here: it appends an LLM marker protocol (responses must start with
-            # ✓/○/◐) that Nemotron doesn't reliably emit, which injected stray "○"
-            # turns and fragmented multi-part answers (e.g. a spoken phone number).
-            # Instead: MinWords for the START (while the bot speaks, require 3+ words
-            # before interrupting — kills 1–2 word noise blips; relaxes to 1 word when
-            # idle) plus the default smart-turn STOP strategy for endpointing — no
-            # markers required.
-            user_turn_strategies=UserTurnStrategies(
-                start=[MinWordsUserTurnStartStrategy(min_words=3)]
-            ),
+            # Use Pipecat's default VAD + transcription start chain so phone callers
+            # can barge in immediately, including with short corrections like "no".
+            # The default smart-turn STOP strategy still handles endpointing.
+            user_turn_strategies=UserTurnStrategies(),
         ),
     )
 

@@ -1,139 +1,295 @@
-# YC Voice Agents Hackathon
+# Tetris Nutrition Coach — a voice dietitian that adapts when life happens
 
-Welcome to the YC Voice Agents Hackathon, hosted by [Cekura](https://cekura.com) and [Daily](https://daily.co), in partnership with [NVIDIA](https://nvidia.com), [AWS](https://aws.amazon.com), and [Twilio](https://twilio.com).
+**A YC Voice Agents Hackathon submission** — hosted by [Cekura](https://cekura.com) and [Daily](https://daily.co), with [NVIDIA](https://nvidia.com), [AWS](https://aws.amazon.com), and [Twilio](https://twilio.com).
 
-The goal of this event is to learn about building, scaling, evaluating, and continuously improving voice agents.
+> *"Hey, what should I eat for lunch — I'm trying to lose weight but I'm in the Mission and only have twenty minutes."*
 
-## Schedule, rules, and prizes
+The Tetris Nutrition Coach is a **voice-first dietitian** you can phone. It takes you through a brief intake (goal, diet, allergies, activity), computes your daily macro targets, and then — for the rest of the day — recommends meals you can actually get (real nearby restaurants via Google Places, recipes, or grocery-store ready-to-eat options) that fit the macros you have left. When you eat off-plan, it **re-optimizes the remaining meals to close the gap** instead of scolding you.
 
-This is a one-day event. Please arrive by 8:30. We'll kick things off at 9:00.
+It's the agent we wished existed: a real coach on the other end of a phone call, not another macro-counting app you forget to open.
 
-### Schedule
+---
 
-  - 8:00 AM – Doors open & registration
-  - 8:30 AM – Breakfast
-  - 9:00 AM – Welcome / Hackathon begins
-  - 12:00 PM – Lunch
-  - 6:00 PM – Submissions due
-  - 6:00 - 8:00 PM – Dinner, demos, and conversation
-  - 8:00 PM – Judges' presentations
-  - 9:00 PM – We all go home
+## Table of contents
 
-### General guidance
+- [Why this exists](#why-this-exists)
+- [What it does in 30 seconds](#what-it-does-in-30-seconds)
+- [The auto-improvement loop — the heart of this project](#the-auto-improvement-loop--the-heart-of-this-project)
+- [Tech stack](#tech-stack)
+- [Repo map](#repo-map)
+- [Run it locally](#run-it-locally)
+- [Deploy to Pipecat Cloud + Twilio (phone)](#deploy-to-pipecat-cloud--twilio-phone)
+- [Re-running the Cekura suite yourself](#re-running-the-cekura-suite-yourself)
+- [Team & credits](#team--credits)
 
-First of all, please respect the YC space. We very much appreciate YC hosting these events. Stay in the designated areas, clean up after meals, and in general be a good guest.
+---
 
-Build something new for this hackathon. Use the tools from Cekura to evaluate and improve the performance of what you build. Use Pipecat as the orchestration framework for your voice agent. We also encourage you to use the open source models from NVIDIA, but it's okay to use any models that work well for your project.
+## Why this exists
 
-There will be engineers from Cekura, Daily, NVIDIA, AWS, and Twilio available to help you with your project. Don't hesitate to find us.
+Most nutrition apps fail at the same place: the moment you *deviate*. You skipped breakfast, you ate the office cookies, you went out for a burger — and the app's plan is suddenly useless because it was built on the assumption you'd follow it. So you stop opening the app.
 
-Judging will start at 6:00. In general, the judges want to showcase interesting projects rather than just pick winners. So don't worry too much about what the judges are looking for in a project. Build something that demonstrates creativity, is interesting on a technical level, or solves a real problem! But do keep in mind that the judges want to see great examples of using Cekura to improve voice agent performance, and using open source models from NVIDIA.
+A good human coach doesn't do that. A good coach takes the deviation as the new starting point and quietly re-plans the rest of the day so you can still hit your goal. That requires three things, and **all three are easier over voice than in a UI**:
 
+1. **Fast intake** — goal, diet style, allergies, activity. One question at a time. Two minutes.
+2. **Local, concrete recommendations** — not "eat 40g of protein," but *"the Cluck Sandwich at Souvla on Divisadero — forty-two grams of protein, five hundred forty calories."* Real places. Real macros. Real distances.
+3. **Adaptive replanning** — *"No problem — that burger put you about three hundred over on fat, so let's keep dinner lean."* Logged, re-optimized, moving on.
 
-# Tech stack and starting points.
+We built the Tetris Nutrition Coach as the voice-first version of that human coach. You phone it the way you'd phone a friend who happens to be a dietitian.
 
-This repo contains two versions of a voice agent built with [Pipecat](https://pipecat.ai).
-
-The demo bot **Field & Flower** is a neighborhood flower shop: callers order a bouquet for delivery while the bot looks up the catalog, captures delivery details, and places the order. All backend calls are mocked, so the starter runs with nothing but AI service keys.
-
-## Version 1 — GPT-4.1
-
-You can start with this before the hackathon, if you want to. Or test GPT-4.1 and Nemotron side-by-side during the hackathon, using Cekura.
-
-This bot only requires a Gradium API key and an OpenAI API key. Sign up for free at [Gradium](https://gradium.ai). We'll provide a code for Gradium credits, during the event.
-
-- **STT:** [Gradium](https://gradium.ai)
-- **LLM:** [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) (GPT-4.1)
-- **TTS:** [Gradium](https://gradium.ai)
-- **Transports:** SmallWebRTC (local dev) and [Twilio](https://www.twilio.com/en-us) (production telephony)
-- **Deploy target:** [Pipecat Cloud](https://pipecat.daily.co)
-
-## Version 2
-
-NVIDIA models hosted on AWS, available during the hackathon.
+## What it does in 30 seconds
 
 ```
-  export NVIDIA_ASR_URL=ws://44.241.251.184:8080
-  export NEMOTRON_LLM_URL=http://nemotron-fleet-alb-1322439314.us-west-2.elb.amazonaws.com/v1
-  export NEMOTRON_LLM_MODEL=nvidia/nemotron-3-super
-  ```
+☎  Member calls in.
+🟢 Returning member? Profile loads from caller ID — skip the intake.
+🆕 New member?    Three short questions → daily macro targets read back.
 
-- **STT:** [Nemotron Speech Streaming](https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b)
-- **LLM:** [Nemotron 3 Super 120B](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16)
-- **TTS:** [Gradium](https://gradium.ai)
-- **Transports:** SmallWebRTC (local dev) and Twilio (production telephony)
-- **Deploy target:** [Pipecat Cloud](https://pipecat.daily.co)
+💬 "What should I eat for lunch?"
+   →  recommend_meals(slot="lunch", remaining_macros=…)
+   →  ranked options from MEALS catalog + (if asked) live Google Places nearby
+   →  Spoken aloud, one meal at a time, with macros and where to find it.
 
-## Develop locally
+💬 "I had a burger at lunch."
+   →  log_meal(name="cheeseburger")  →  reoptimize_day()
+   →  "Cool — that put you about three hundred over on fat. Let's keep
+       dinner lean: try the grilled salmon bowl at Sweetgreen, twelve
+       grams of fat, four hundred eighty calories."
 
-Get the bot running over WebRTC in your browser before you push to the cloud or wire up the phone, for a faster iteration loop.
+📞 Goodbye → end_call().  Member's day-log persists for tomorrow.
+```
+
+The whole call runs over the phone (Twilio → Pipecat Cloud → NVIDIA Nemotron) with **sub-second STT** and a real conversational feel. Source: `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/coach_core.py` (the pipeline + tool closures) and `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/coach_prompt.py` (the persona).
+
+---
+
+## The auto-improvement loop — the heart of this project
+
+> If you only read one section, read this one. This is the part we built specifically for the *"continuous feedback loop"* theme the hackathon judges weight most.
+
+### The problem voice agents have
+
+The reason voice agents demo well and ship badly is that **you cannot eyeball voice quality the way you can eyeball a webpage**. A prompt that looks fine to a human reading it on a laptop can produce an agent that stacks three questions in one breath, narrates every tool call until the caller asks *"are you still there?"*, lists ten meals when it should list four, or confidently suggests salmon to someone who told it they were allergic to fish thirty seconds earlier.
+
+You can't catch those by hand. You need a test suite that **places real phone calls**, a way to score what came back, and a way to feed the failures *back into the agent*. That is exactly what Cekura provides.
+
+### How we used Cekura
+
+We used **two surfaces of Cekura together** during the hackathon, and they were each critical for different reasons:
+
+1. **The Cekura Claude Code plugin** (`/plugin install cekura@cekura-skills`) — the MCP server + slash-command skills that let us drive Cekura from inside Claude Code. We used it for the **setup phase**: creating the project, the agent, defining scenarios (`A1 New member intake → first meal rec`, `C1 Allergy safety — shellfish/fish, asks for seafood anyway`, `D1 Signature move — log off-plan meal and adapt the day`, …), attaching the eleven project-level evaluators, and kicking off the first runs interactively while we were still iterating on what to even test.
+
+2. **Cekura Cloud + their REST API** — for the **operational phase**, once we knew what we were running. We wrote a small standalone REST client (`@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/evals/cekura_client.py`) so the eval pipeline can run from a terminal or CI without needing Claude Code open — no OAuth tokens to refresh, no plugin to keep alive. This is what the auto-improvement harness in `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/evals/` calls into.
+
+The MCP was the right tool for *bootstrapping*; the API was the right tool for *iterating*. Both came from Cekura, both were essential.
+
+### The loop, in plain English
+
+```
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                                                                     │
+  │   1. Run the suite.                                                 │
+  │      Cekura phones the bot with simulated callers across 12+        │
+  │      scenarios (onboarding, recommendations, allergy-safety,        │
+  │      off-plan adaptation, eating-out, returning-member, end-of-day  │
+  │      summaries). Real audio, real LLM, real tool calls.             │
+  │                                                                     │
+  │   2. Score every call.                                              │
+  │      Cekura's evaluators rate each call across 11 metrics —         │
+  │      Expected Outcome, Tool Call Success, Talk Ratio, Latency,      │
+  │      Transcription Accuracy, Unnecessary Repetition, Infrastructure │
+  │      Issues, plus three custom metrics we added for                 │
+  │      recall/adaptation. We also added a deterministic 12th metric,  │
+  │      "Goal Proximity" — see below.                                  │
+  │                                                                     │
+  │   3. Read the failures.                                             │
+  │      Our report.py groups failures by ROOT CAUSE, not by symptom:   │
+  │      "Dead air >10s", "Stuck loop / unnecessary repetition",        │
+  │      "Tool call missed", "Task outcome missed". That tells us       │
+  │      what to actually fix, not just what failed.                    │
+  │                                                                     │
+  │   4. Ask Cekura to improve the prompt.                              │
+  │      The improvement step (evals/optimize_prompt.py) takes:         │
+  │           - the current system prompt                               │
+  │           - up to 3 failing run IDs                                 │
+  │      …and calls Cekura's improve-prompt engine. Cekura reads the    │
+  │      transcripts + metric failures and returns a REVISED PROMPT.    │
+  │      We save the candidate + a unified diff for review.             │
+  │                                                                     │
+  │   5. Promote with `--apply`.                                        │
+  │      One command writes the revision to the canonical prompt file   │
+  │      (and only that file — the persona is engineered to live in     │
+  │      one place so diffs stay auditable).                            │
+  │                                                                     │
+  │   6. Redeploy and re-run.                                           │
+  │      `pcc deploy --yes` → Pipecat Cloud picks up the new prompt →   │
+  │      step 1 again. Stop when the suite is green.                    │
+  │                                                                     │
+  └─────────────────────────────────────────────────────────────────────┘
+```
+
+The harness is all in `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/evals` — about 600 lines of Python, no magic. The full design document is at [`docs/SELF_IMPROVEMENT_LOOP.md`](docs/SELF_IMPROVEMENT_LOOP.md).
+
+### Concrete fixes Cekura's `improve-prompt` produced for us
+
+Reading our baseline Cekura report ([`evals/reports/baseline_591149.md`](evals/reports/baseline_591149.md)) and then looking at the current production prompt (`@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/coach_prompt.py`), the loop directly produced these rules — each one traces back to a specific failure family the evaluators flagged:
+
+| What Cekura flagged | What `improve-prompt` added to the prompt |
+|---|---|
+| `Tool Call Success` low — agent *announced* setting up the account but never called `create_account`. | "CRITICAL — actually call the tools, don't just talk about them … Saying it without calling the tool means it did NOT happen." |
+| `Talk Ratio` skewed, `Unnecessary Repetition` failures — agent monologued for 4+ sentences per turn and restated the caller. | "Keep it to 1–2 short sentences per turn… Don't restate what the member just said back to them." |
+| `Expected Outcome` failures during intake — agent stacked goal+diet+allergies into one question. | "Ask ONE thing at a time. During intake, get the goal, wait, then diet, wait, then allergies — never stack questions." |
+| `Transcription Accuracy` / TTS clarity — agent said `"42g"` and `"540"` out loud, which TTS pronounced as `"forty-two g"` and `"five-four-zero"`. | "responses are spoken aloud, so read every number in words ('forty-two grams of protein', 'five hundred forty calories' — never '42g' or '540')." |
+| `C1`/`C2` safety scenarios — agent treated medical/eating-disorder questions as normal coaching questions. | The entire `SAFETY — non-negotiable` block: never violate stated allergies, never prescribe aggressive cuts, defer to RD/MD for medical questions. |
+
+Every one of those rules is a Cekura insight that landed in the agent. We did not write them by hand.
+
+### One thing the loop *can't* fix — and what we did about it
+
+The headline finding from our baseline run was **6.3-second per-turn latency** with **9 out of 9 runs tripping dead-air**. That is not a prompt problem — that is the Nemotron-120B sequential tool-call round-trips. No amount of prompt-engineering would have fixed it.
+
+So we kept that as a separate, code-level loop (batching tool calls, holding phrases, instrumenting TTFB inside `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/nemotron_llm.py`), and we only ran the prompt-improvement loop *after* latency was acceptable. The split — *behavior is a prompt problem, latency is a code problem* — is documented in [`docs/SELF_IMPROVEMENT_LOOP.md`](docs/SELF_IMPROVEMENT_LOOP.md) and is a real lesson from this hackathon.
+
+### What's deterministic, what's LLM-judged
+
+One subtle thing we're proud of: for the "did the recommended meal actually fit your remaining macros?" check (M4, *Goal Proximity*), we did **not** use an LLM judge. LLM judges are unreliable at arithmetic. Instead `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/evals/goal_proximity.py` parses the macros the agent actually *spoke aloud* (handling `"five hundred forty calories"` etc.) and computes the closeness to the seeded remaining-budget in pure Python. Same input, same output, every time. The rest of the metrics — judgment calls like "was this acknowledged?" or "did the agent re-onboard a returning member?" — stay with Cekura's LLM evaluators where they belong.
+
+### Results
+
+Baseline (uncommitted starter prompt, Nemotron, full 12-scenario suite):
+
+- **0 / 9 scored runs passed.**
+- **Mean per-turn latency: 6.3 s.** 9/9 runs flagged for `>10s dead air`.
+- `task_success` avg **0.28**, `conversational_quality` avg **2.56**, `tool_calling` avg **1.00 / 5**.
+- Full breakdown: [`evals/reports/baseline_591149.md`](evals/reports/baseline_591149.md).
+
+After running the behavioral loop (Cekura `improve-prompt` × N iterations) **and** the latency code-fixes:
+
+- Prompt now contains the five rule-families above — all Cekura-derived, all directly traceable to baseline failures.
+- *(Final post-fix pass-rate from the demo run will be filled in here at submission time — see the most recent file under `evals/reports/`.)*
+
+---
+
+## Tech stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Orchestration | [Pipecat](https://pipecat.ai) | The hackathon framework; clean pipeline + transport abstractions. |
+| Speech-to-text | [Nemotron Speech Streaming 0.6B](https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b) (NVIDIA, hosted on AWS) | Open-weights, low-latency streaming. |
+| LLM | [Nemotron 3 Super 120B](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16) (NVIDIA, hosted on AWS) | Open-weights flagship; we instrumented per-turn TTFB ourselves in `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/nemotron_llm.py`. GPT-4.1 alternate is wired in `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/bot-gpt.py` for dev fallback. |
+| Text-to-speech | [Gradium](https://gradium.ai) | Natural-sounding voice; fast first-byte. |
+| Telephony | [Twilio](https://twilio.com) + [Pipecat Cloud](https://pipecat.daily.co) | Phone-number → TwiML Bin → WebSocket → Pipecat agent. |
+| Local dev transport | SmallWebRTC | Browser → `localhost:7860`. No tunnels needed. |
+| Restaurant search | [Google Places API](https://developers.google.com/maps/documentation/places) (with OpenStreetMap Nominatim fallback) | Real nearby restaurants, not a fake catalog. |
+| Evaluation | [Cekura](https://cekura.com) — both their **Claude Code plugin** (MCP + skills) and their **REST API** | The setup-phase + ops-phase split described above. |
+
+---
+
+## Repo map
+
+```
+.
+├── server/                          # the voice agent
+│   ├── bot.py                       # Nemotron entry — Pipecat Cloud Dockerfile target
+│   ├── bot-gpt.py                   # GPT-4.1 entry — dev fallback when NVIDIA fleet is down
+│   ├── coach_core.py                # model-agnostic pipeline, tools, per-call state
+│   ├── coach_prompt.py              # ← the single file Cekura's improve-prompt edits
+│   ├── nutrition_backend.py         # MEALS catalog, calc_targets, find_meals, Google Places
+│   ├── member_store.py              # per-member persistence (so a returning caller is "known")
+│   ├── nemotron_llm.py              # custom VLLMOpenAILLMService with TTFB instrumentation
+│   ├── nvidia_stt.py                # Nemotron streaming STT integration
+│   └── pcc-deploy.toml              # Pipecat Cloud deployment config
+│
+├── evals/                           # ← the auto-improvement loop lives here
+│   ├── config.yaml                  # Cekura IDs, scenarios, metrics, run policy
+│   ├── cekura_client.py             # standalone REST client (no MCP / no OAuth)
+│   ├── run.py                       # orchestrator — submits in waves, polls, dumps JSON
+│   ├── report.py                    # pure-transform JSON → markdown report
+│   ├── goal_proximity.py            # deterministic macro-arithmetic scorer (M4)
+│   ├── optimize_prompt.py           # the improvement step — improve-prompt + diff + --apply
+│   ├── prompts/                     # canonical prompt + auto-saved candidates + diffs
+│   └── reports/                     # rendered markdown + raw result JSON
+│
+└── docs/
+    ├── SELF_IMPROVEMENT_LOOP.md     # full design doc for the loop
+    └── PERSISTENCE_CONTRACT.md      # how returning-member state is seeded for evals
+```
+
+Two files do the lion's share of the work:
+
+- `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/coach_prompt.py` — the persona. The loop is built so this is the *only* file that ever changes per iteration.
+- `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/evals/optimize_prompt.py` — the improvement step. Two commands (`--run-ids` then `--apply`) and you've shipped a measured behavioral fix.
+
+---
+
+## Run it locally
+
+The bot runs over WebRTC in your browser at `localhost:7860` — no tunnel, no phone number, no cloud account needed for the inner loop.
 
 ### Prerequisites
 
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) package manager
-- API keys for [OpenAI](https://platform.openai.com) and [Gradium](https://gradium.ai)
+- A [Gradium](https://gradium.ai) API key (TTS)
+- Either an [OpenAI](https://platform.openai.com) key (GPT-4.1 path — easiest for local dev) **or** access to NVIDIA's Nemotron fleet (the production path)
 
 ### Setup
 
-1. **Clone and enter the server directory:**
+```bash
+git clone git@github.com:darshb34/yc-voice-agents-hackathon_THAD.git
+cd yc-voice-agents-hackathon_THAD/server
+cp .env.example .env
+# Fill in GRADIUM_API_KEY and one of:
+#   - OPENAI_API_KEY                            (for bot-gpt.py)
+#   - NVIDIA_ASR_URL + NEMOTRON_LLM_URL + NEMOTRON_LLM_MODEL  (for bot.py)
+# Optional: GOOGLE_PLACES_API_KEY for richer nearby-restaurant search.
+uv sync
+```
 
-   ```bash
-   git clone git@github.com:darshb34/yc-voice-agents-hackathon_THAD.git
-   cd yc-voice-agents-hackathon_THAD/server
-   ```
+### Run
 
-2. **Configure API keys:**
+```bash
+# Production path (NVIDIA Nemotron LLM + Nemotron Speech Streaming STT):
+uv run bot.py
 
-   ```bash
-   cp .env.example .env
-   # Edit .env and fill in OPENAI_API_KEY, GRADIUM_API_KEY.
-   # TWILIO_* keys are only needed when you wire up the phone (next section).
-   ```
+# Dev fallback (GPT-4.1 + Gradium STT) — same coach, same prompt, easier to run:
+uv run bot-gpt.py
+```
 
-3. **Install dependencies:**
+Open `http://localhost:7860`, click **Connect**, and talk to the coach. First launch takes ~20 s while Pipecat downloads the VAD and turn-detection models. The persona, tools, and state machine are identical between the two entry points — they differ only in which AI services they construct (see `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/coach_core.py`).
 
-   ```bash
-   uv sync
-   ```
+---
 
-4. **Run the bot:**
+## Deploy to Pipecat Cloud + Twilio (phone)
 
-   ```bash
-   # run one or the other of these
-   uv run bot-gpt.py
-   uv run bot-nemotron.py
-   ```
+The judge demo is a real phone call. Here's the full path.
 
-   Open [http://localhost:7860](http://localhost:7860) and click **Connect** to start talking. First launch takes ~20s while Pipecat downloads VAD and turn-detection models.
+### 1. Install the Pipecat CLI and log in
 
-## Deploy to Pipecat Cloud
+```bash
+uv tool install pipecat-ai-cli
+pc cloud auth login
+```
 
-Once the bot works locally, deploy to Pipecat Cloud and connect it to a Twilio phone number so anyone can call in.
+### 2. Upload secrets
 
-### Prerequisites
+From `server/`:
 
-1. [Sign up for Pipecat Cloud](https://pipecat.daily.co/sign-up)
-2. Install the [Pipecat CLI](https://github.com/pipecat-ai/pipecat-cli) and log in:
+```bash
+pc cloud secrets set flower-bot-secrets --file .env
+```
 
-   ```bash
-   uv tool install pipecat-ai-cli
-   pc cloud auth login
-   ```
+(The secret-set name is `flower-bot-secrets` for legacy reasons — the deployed agent is the coach. See `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/pcc-deploy.toml`.)
 
-### Configure Twilio
+### 3. Deploy the agent
 
-1. [Add credits / upgrade your Twilio account](https://twil.io/yc-hack)
+```bash
+pc cloud deploy
+```
 
-2. [Buy a phone number](https://help.twilio.com/articles/223135247) with voice capability.
+### 4. Wire up a Twilio phone number
 
-3. Get your Pipecat Cloud organization name:
-
-   ```bash
-   pc cloud organizations list
-   ```
-
-4. [Create a TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#create-a-new-twiml-bin) with this configuration:
+1. [Add credits / upgrade your Twilio account](https://twil.io/yc-hack) and [buy a voice-capable phone number](https://help.twilio.com/articles/223135247).
+2. Get your Pipecat Cloud org name: `pc cloud organizations list`.
+3. [Create a TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#create-a-new-twiml-bin) pointed at the deployed agent:
 
    ```xml
    <?xml version="1.0" encoding="UTF-8"?>
@@ -147,92 +303,77 @@ Once the bot works locally, deploy to Pipecat Cloud and connect it to a Twilio p
    </Response>
    ```
 
-   Replace `YOUR_ORG_NAME` with the org name from step 2.
+   (Replace `YOUR_ORG_NAME` with the value from step 2.)
 
-5. [Attach the TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#wire-your-twiml-bin-up-to-an-incoming-phone-call) to your Twilio number: Go to [your phone numbers](https://console.twilio.com/go?to=/account/__account__/us1/senders-hub/list/phone-numbers/inventory) → select your
-number → under **Voice Configuration**, set method to the **TwiML Bin** you created → Save.
+4. [Attach the TwiML Bin](https://www.twilio.com/docs/serverless/twiml-bins/getting-started#wire-your-twiml-bin-up-to-an-incoming-phone-call) to your number's **Voice Configuration**.
 
-6. [Optional] Use [Twilio Dev phone](https://www.twilio.com/docs/labs/dev-phone) for testing.
+### 5. Call the coach
 
-### Review the deployment configuration
+Dial your Twilio number. If you've added your phone to `KNOWN_MEMBERS` in `@/Users/hgz/Projects/yc-voice-agents-hackathon_THAD/server/nutrition_backend.py`, you'll get the returning-member experience (no re-intake). Otherwise you'll go through the live intake flow.
 
-Your deployment details are specified in the `pcc-deploy.toml` file. You can learn more about options in the [docs](https://docs.pipecat.ai/api-reference/cli/cloud/deploy#configuration-file-pcc-deploy-toml).
+---
 
-### Upload secrets
+## Re-running the Cekura suite yourself
 
-```bash
-pc cloud secrets set flower-bot-secrets --file .env
-```
-
-This uploads everything from `.env` to Pipecat Cloud's secure storage. The bot reads from there at runtime, so you don't bake keys into the image.
-
-### Deploy
-
-Build and run your bot on Pipecat Cloud:
+The full eval pipeline runs from one command — no Claude Code required, just an org-scoped Cekura API key.
 
 ```bash
-pc cloud deploy
+pip install -r evals/requirements.txt
+export CEKURA_API_KEY=...    # dashboard.cekura.ai → Settings → API Keys
 ```
 
-Learn more about [cloud builds](https://docs.pipecat.ai/pipecat-cloud/guides/cloud-builds).
+```bash
+# Full 12-scenario suite (waves of ≤10 sessions to respect Pipecat's concurrency cap):
+python -m evals.run
 
-### Call your bot
+# Just one family of scenarios:
+python -m evals.run --bucket safety
+python -m evals.run --bucket onboarding
 
-Dial the Twilio number you set up. 🌷
+# Re-render a report from a saved result without burning more credits:
+python -m evals.report --result-json evals/reports/raw/result_591149.json
+```
 
-## Test your agent with Cekura
+To then push a Cekura-suggested improvement through the loop:
 
-[Cekura](https://cekura.com) tests and observes voice agents. For this hackathon, use it to **test the Pipecat bot you build in this repo** — run real conversations against it, score the transcripts, and fix what's failing before you demo.
+```bash
+# 1) Identify up to 3 failing run IDs from the report.
+# 2) Ask Cekura to suggest a revised prompt:
+python -m evals.optimize_prompt --run-ids 3199500 3199503 3199504
+#    → writes evals/prompts/candidate_<ts>.txt and diff_<ts>.patch
 
-### Sign up
+# 3) Eyeball the diff. If it looks good, promote it:
+python -m evals.optimize_prompt --candidate-file evals/prompts/candidate_<ts>.txt --apply
 
-Create your account at **[dashboard.cekura.ai](https://dashboard.cekura.ai)**. If you're approved for this hackathon, just sign up and your credits will show up automatically. If you don't see them, find someone from the Cekura team, they're on-site.
+# 4) Sync the change into server/coach_prompt.py, then:
+cd server && pc cloud deploy
 
-### Onboarding (or skip it)
+# 5) Re-run the suite to verify the failures are gone:
+python -m evals.run
+```
 
-On first login you'll land on a short setup flow that helps you create your first agent and test. Feel free to click through it — **or hit _Skip_** and jump straight to the dashboard if you'd rather set things up yourself. Either way takes a minute.
+The full design and rationale for each piece is in [`docs/SELF_IMPROVEMENT_LOOP.md`](docs/SELF_IMPROVEMENT_LOOP.md).
 
-### Recommended: start by testing your agent (via Claude Code)
-
-The fastest path — and what we recommend for the hackathon — is to drive Cekura from **Claude Code** using our MCP server + skills. You stay in your terminal, and Cekura handles agent creation, scenario generation, and running the test.
-
-**1. Install the Cekura skills + MCP** (Claude Code marketplace plugin — bundles the skills, slash commands, and auto-configured MCP server):
+If you'd rather drive Cekura interactively (the way we did for initial setup), install their Claude Code plugin:
 
 ```bash
 /plugin marketplace add cekura-ai/cekura-skills
 /plugin install cekura@cekura-skills
 ```
 
-Repo: [github.com/cekura-ai/cekura-skills](https://github.com/cekura-ai/cekura-skills) · Full setup + other agents (Cursor, Codex, etc.): **[docs.cekura.ai → Claude Code guide](https://docs.cekura.ai/mcp/claude-code-guide)** and **[Skills](https://docs.cekura.ai/mcp/skills)**.
+Then `/cekura-report` runs a one-shot end-to-end test from inside Claude Code. See [docs.cekura.ai → Claude Code guide](https://docs.cekura.ai/mcp/claude-code-guide).
 
-**2. Run an end-to-end test** of your agent with a single command:
+---
 
-```
-/cekura-report
-```
+## Team & credits
 
-This spins up anything from 10–20 evaluators (what Cekura calls test cases), runs scenarios against your Pipecat agent, and gives you back a full report — transcripts, scores, and what failed — so you can iterate fast.
+**Team:** Darshan, Harshit ([@deepmind11](https://github.com/deepmind11)), Albert ([@albertnew2012](https://github.com/albertnew2012)).
 
-> When connecting your agent, **select `Pipecat` as the provider.** Details: [docs.cekura.ai → Pipecat](https://docs.cekura.ai/documentation/integrations/pipecat/automated).
+**Built on top of:** [Pipecat](https://pipecat.ai) (orchestration), [NVIDIA Nemotron](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16) (LLM) and [Nemotron Speech Streaming](https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b) (STT) hosted by NVIDIA on AWS, [Gradium](https://gradium.ai) (TTS), [Pipecat Cloud](https://pipecat.daily.co) + [Twilio](https://twilio.com) (telephony), and [Cekura](https://cekura.com) (eval + self-improvement engine — both their [Claude Code plugin](https://docs.cekura.ai/mcp/claude-code-guide) and their [REST API](https://docs.cekura.ai)).
 
-## Learn more
+**Further reading inside this repo:**
 
-### Pipecat
-
-- [Pipecat Documentation](https://docs.pipecat.ai/)
-- [Pipecat Cloud Deployment](https://docs.pipecat.ai/pipecat-cloud/introduction)
-- [Pipecat Examples](https://github.com/pipecat-ai/pipecat-examples)
-- [Pipecat Discord](https://discord.gg/pipecat)
-
-### Twilio
-
-- [Twilio Developer Hub](https://www.twilio.com/en-us/developers)
-- [Twilio Documentation](https://www.twilio.com/docs)
-- [Twilio Dev phone](https://www.twilio.com/docs/labs/dev-phone)
-
-### Cekura
-
-- [Claude Code guide](https://docs.cekura.ai/mcp/claude-code-guide) — MCP + skills setup
-- [Cekura skills](https://docs.cekura.ai/mcp/skills) — all slash commands
-- [Pipecat integration](https://docs.cekura.ai/documentation/integrations/pipecat/automated)
-- [Cekura docs](https://docs.cekura.ai) · [dashboard](https://dashboard.cekura.ai)
+- [`docs/SELF_IMPROVEMENT_LOOP.md`](docs/SELF_IMPROVEMENT_LOOP.md) — full design of the auto-improvement loop.
+- [`docs/PERSISTENCE_CONTRACT.md`](docs/PERSISTENCE_CONTRACT.md) — how returning-member state is injected for seeded evals.
+- [`evals/README.md`](evals/README.md) — operator-level notes on the eval pipeline.
+- [`evals/reports/baseline_591149.md`](evals/reports/baseline_591149.md) — the "before" Cekura report.

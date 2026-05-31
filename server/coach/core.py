@@ -48,7 +48,6 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
-from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
@@ -385,9 +384,9 @@ async def run_bot(
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(confidence=0.8, start_secs=0.3, stop_secs=0.4, min_volume=0.6)
             ),
-            # MinWords START strategy (3+ words to interrupt while the bot speaks) +
-            # default smart-turn STOP. Matches the proven config; no LLM markers.
-            user_turn_strategies=UserTurnStrategies(start=[MinWordsUserTurnStartStrategy(min_words=3)]),
+            # Start on VAD so callers can barge in immediately, even with one word.
+            # The default transcription fallback and smart-turn STOP remain enabled.
+            user_turn_strategies=UserTurnStrategies(),
         ),
     )
 
