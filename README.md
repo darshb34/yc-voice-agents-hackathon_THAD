@@ -2,6 +2,8 @@
 
 **A YC Voice Agents Hackathon submission** — hosted by [Cekura](https://cekura.com) and [Daily](https://daily.co), with [NVIDIA](https://nvidia.com), [AWS](https://aws.amazon.com), and [Twilio](https://twilio.com).
 
+GITHUB: https://github.com/darshb34/yc-voice-agents-hackathon_THAD
+
 > *"Hey, what should I eat for lunch — I'm trying to lose weight but I'm in the Mission and only have twenty minutes."*
 
 The Tetris Nutrition Coach is a **voice-first dietitian** you can phone. It takes you through a brief intake (goal, diet, allergies, activity), computes your daily macro targets, and then — for the rest of the day — recommends meals you can actually get (real nearby restaurants via Google Places, recipes, or grocery-store ready-to-eat options) that fit the macros you have left. When you eat off-plan, it **re-optimizes the remaining meals to close the gap** instead of scolding you.
